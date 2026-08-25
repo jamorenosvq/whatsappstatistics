@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Estadísticas de WhatsApp</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>Estadísticas de WhatsApp</h1>
+    <p>Sube una exportación <strong>.txt</strong> de WhatsApp y el análisis se ejecutará íntegramente en tu navegador.</p>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="panel">
+    <h2>1. Cargar chat</h2>
+    <div class="upload-row">
+      <label class="file-label">
+        <span>Fichero de WhatsApp (.txt)</span>
+        <input id="chatFile" type="file" accept=".txt,text/plain">
+      </label>
+      <label class="file-label optional">
+        <span>GR.xlsx (opcional: nombres y provincias)</span>
+        <input id="excelFile" type="file" accept=".xlsx,.xls">
+      </label>
+    </div>
+
+    <div class="filters">
+      <label>Desde <input id="startDate" type="date" value="2025-10-01"></label>
+      <label>Hasta <input id="endDate" type="date" value="2026-08-25"></label>
+    </div>
+
+    <details>
+      <summary>Usuarios excluidos</summary>
+      <p id="excludedUsers"></p>
+    </details>
+
+    <button id="runBtn" disabled>Analizar chat</button>
+    <div id="status" class="status">Selecciona un fichero .txt.</div>
+    <div id="progress" class="progress"><div></div></div>
+  </section>
+
+  <section id="summary" class="summary hidden"></section>
+
+  <section id="results" class="hidden">
+    <div class="section-title">
+      <h2>Gráficos</h2>
+      <button id="excelBtn" class="secondary">Descargar estadísticas en Excel</button>
+    </div>
+    <div class="grid">
+      <article class="card"><div id="chartDay"></div></article>
+      <article class="card"><div id="chartHour"></div></article>
+      <article class="card"><div id="chartWeekday"></div></article>
+      <article class="card"><div id="chartUserBar"></div></article>
+      <article class="card"><div id="chartUserLine"></div></article>
+      <article class="card"><div id="chartUserCum"></div></article>
+      <article class="card"><div id="chartCharsLine"></div></article>
+      <article class="card"><div id="chartCharsCum"></div></article>
+      <article class="card"><div id="chartLength"></div></article>
+      <article class="card"><div id="chartWords"></div></article>
+      <article class="card"><div id="chartWordsUser"></div></article>
+      <article class="card"><div id="chartTrigrams"></div></article>
+      <article class="card"><div id="chartTrigramsUser"></div></article>
+      <article class="card"><div id="chartQuestion"></div></article>
+    </div>
+
+    <article class="card wide">
+      <h3>Nube de palabras</h3>
+      <canvas id="wordCloud" width="1000" height="650"></canvas>
+    </article>
+
+    <article class="card wide">
+      <h3>Mensajes por provincia</h3>
+      <p id="provinceNotice" class="muted">Para este gráfico puedes cargar GR.xlsx, con las columnas <code>contacto</code> y <code>Provincia</code>.</p>
+      <div id="provinceTable"></div>
+    </article>
+
+    <article class="card wide">
+      <h3>Tablas de resultados</h3>
+      <div id="tables"></div>
+    </article>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">El análisis se ejecuta localmente en el navegador. El fichero de WhatsApp no se sube a un servidor.</div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
