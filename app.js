@@ -3,8 +3,6 @@ let analysis = null;
 let chatText = null;
 let excelArrayBuffer = null;
 
-const excluded = ['Cristina Grupo','Iusra','Sosa','José Antonio','Leila','Lucía','Javi Alcántara','Fernando'];
-document.getElementById('excludedUsers').textContent = excluded.join(', ');
 
 const chatFile = document.getElementById('chatFile');
 const excelFile = document.getElementById('excelFile');
@@ -49,7 +47,6 @@ async function runAnalysis(){
     pyodide.globals.set('CHAT_TEXT', chatText);
     pyodide.globals.set('START_DATE', start);
     pyodide.globals.set('END_DATE', end);
-    pyodide.globals.set('EXCLUDED_JSON', JSON.stringify(excluded));
     progressBar.style.width='30%';
     const result = await pyodide.runPythonAsync(python);
     progressBar.style.width='85%';
@@ -74,7 +71,6 @@ import re, json, math
 from collections import Counter, defaultdict
 from datetime import datetime
 
-excluded = set(json.loads(EXCLUDED_JSON))
 START = START_DATE
 END = END_DATE
 
@@ -116,7 +112,7 @@ for line in CHAT_TEXT.replace('\r\n','\n').replace('\r','\n').split('\n'):
         current['message'] += '\n' + line
 
 # Date filtering, equivalent to the user's pandas .between().
-rows=[r for r in rows if START <= r['date'].strftime('%Y-%m-%d') <= END and r['username'] not in excluded and r['username']!='']
+rows=[r for r in rows if START <= r['date'].strftime('%Y-%m-%d') <= END and r['username']!='']
 rows.sort(key=lambda r:r['date'])
 
 # Ignore system messages that were parsed without a sender when possible.
@@ -128,32 +124,53 @@ def clean(s):
     s=re.sub(r'[^a-záéíóúüñ]',' ',s)
     return s
 
-stop_words=set('de la que el en y a los del se las por un para con no una su al lo es como más pero sus le ya o este sí porque esta entre cuando muy sin sobre también me hasta hay donde quien desde todo nos durante todos uno les ni contra otros ese eso ante ellos e esto mí antes algunos qué unos yo otro otras otra él tanto esa estos mucho quienes nada muchos cual poco ella estar estas algunas algo nosotros mi mis tú te ti tus tus'.split())
-stop_words.update(['https','null','omitido','multimedia','www','com','status','p','html','v'])
-
+# Preprocesamiento lingüístico: stopwords + lematización morfológica conservadora.
+stop_words=set("""a al algo alguna algunas alguno algunos ante antes aquel aquella aquellas aquellos aqui aquí asi así como con contra cual cuales cuando de del desde donde dos el él ella ellas ellos en entre era eran eres es esa esas ese eso esos esta estaba estaban estado estas este esto estos fue fueron ha haber habia había han hasta hay he la las le les lo los más me mi mis mucha muchas mucho muchos muy nada ni no nos nosotros o otra otras otro otros para pero por que qué quien quién quienes se sea según si sí sin sobre son su sus también te tenía tienen tiene todo toda todas todos tu tú tus un una unas uno unos usted ustedes y ya yo https www com net org html null omitido multimedia status media p v q d x e u etc""".split())
+lemma_map={
+"soy":"ser","eres":"ser","es":"ser","somos":"ser","sois":"ser","son":"ser","era":"ser","eras":"ser","éramos":"ser","erais":"ser","eran":"ser","fui":"ser","fuiste":"ser","fue":"ser","fuimos":"ser","fuisteis":"ser","fueron":"ser",
+"estoy":"estar","estás":"estar","está":"estar","estamos":"estar","estáis":"estar","están":"estar","estaba":"estar","estabas":"estar","estábamos":"estar","estabais":"estar","estaban":"estar","estuve":"estar","estuviste":"estar","estuvo":"estar","estuvimos":"estar","estuvieron":"estar",
+"tengo":"tener","tienes":"tener","tiene":"tener","tenemos":"tener","tenéis":"tener","tienen":"tener","tenía":"tener","tenías":"tener","teníamos":"tener","tenían":"tener","tuve":"tener","tuviste":"tener","tuvo":"tener","tuvimos":"tener","tuvieron":"tener",
+"hago":"hacer","haces":"hacer","hace":"hacer","hacemos":"hacer","hacéis":"hacer","hacen":"hacer","hice":"hacer","hiciste":"hacer","hizo":"hacer","hicimos":"hacer","hicieron":"hacer",
+"voy":"ir","vas":"ir","va":"ir","vamos":"ir","vais":"ir","van":"ir","iba":"ir","ibas":"ir","íbamos":"ir","ibais":"ir","iban":"ir",
+"digo":"decir","dices":"decir","dice":"decir","decimos":"decir","dicen":"decir","dije":"decir","dijo":"decir","dijimos":"decir","dijeron":"decir",
+"puedo":"poder","puedes":"poder","puede":"poder","podemos":"poder","pueden":"poder","podía":"poder","podías":"poder","podíamos":"poder","podían":"poder",
+"quiero":"querer","quieres":"querer","quiere":"querer","queremos":"querer","quieren":"querer","quería":"querer","querías":"querer","queríamos":"querer","querían":"querer",
+"vengo":"venir","vienes":"venir","viene":"venir","venimos":"venir","vienen":"venir","vino":"venir","vinieron":"venir",
+"doy":"dar","das":"dar","da":"dar","damos":"dar","dan":"dar","dio":"dar","dieron":"dar",
+"sé":"saber","sabes":"saber","sabe":"saber","sabemos":"saber","saben":"saber","sabía":"saber","sabían":"saber",
+"veo":"ver","ves":"ver","ve":"ver","vemos":"ver","ven":"ver","vi":"ver","vio":"ver","vieron":"ver"
+}
+def lemma_word(w):
+    if w in lemma_map: return lemma_map[w]
+    if len(w)>=8 and w.endswith('amientos'): return w[:-9]+'amiento'
+    if len(w)>=8 and w.endswith('imientos'): return w[:-9]+'imiento'
+    if len(w)>=7 and w.endswith('aciones'): return w[:-7]+'ación'
+    if len(w)>=7 and w.endswith('iciones'): return w[:-7]+'ición'
+    if len(w)>=7 and w.endswith(('adores','adoras')): return w[:-7]+'ador'
+    if len(w)>=7 and w.endswith('mente'): return w[:-5]
+    if len(w)>=6 and w.endswith(('iendo','ando')): return w[:-5 if w.endswith('iendo') else -4]
+    if len(w)>=6 and w.endswith('es') and not w.endswith(('ses','ces')): return w[:-2]
+    if len(w)>=6 and w.endswith(('os','as')): return w[:-2]
+    if len(w)>=5 and w.endswith(('o','a')): return w[:-1]
+    return w
 def tokens_for(messages):
     out=[]
     for msg in messages:
-        out += [w for w in clean(str(msg)).split() if w not in stop_words and len(w)>=4]
+        for w in clean(str(msg)).split():
+            if w in stop_words or len(w)<4: continue
+            lw=lemma_word(w)
+            if lw not in stop_words and len(lw)>=4: out.append(lw)
     return out
-
 all_tokens=tokens_for([r['message'] for r in rows])
 word_counts=Counter(all_tokens)
 trigram_counts=Counter(tuple(all_tokens[i:i+3]) for i in range(max(0,len(all_tokens)-2)))
-trigram_counts=dict(trigram_counts)
-
 def top_counter(c,n=50):
-    return [{'key': (' '.join(k) if isinstance(k,tuple) else k), 'count':v} for k,v in Counter(c).most_common(n)]
-
-# User-specific words/trigrams
-user_word={}
-user_tri={}
+    return [{'key':(' '.join(k) if isinstance(k,tuple) else k),'count':v} for k,v in Counter(c).most_common(n)]
+user_word={}; user_tri={}
 for u in users:
-    msgs=[r['message'] for r in rows if r['username']==u]
-    ts=tokens_for(msgs)
+    ts=tokens_for([r['message'] for r in rows if r['username']==u])
     user_word[u]=top_counter(Counter(ts),20)
-    tc=Counter(tuple(ts[i:i+3]) for i in range(max(0,len(ts)-2)))
-    user_tri[u]=top_counter(tc,15)
+    user_tri[u]=top_counter(Counter(tuple(ts[i:i+3]) for i in range(max(0,len(ts)-2))),15)
 
 # Basic aggregates
 user_msg=Counter(r['username'] for r in rows)
@@ -183,9 +200,11 @@ for d in dates:
 
 # QuestionRandom
 question_day=Counter()
+question_rows=[]
 for r in rows:
-    if '#preguntarandom' in r['message'].lower() or '#preguntaRandom'.lower() in r['message'].lower():
+    if '#preguntarandom' in r['message'].lower():
         question_day[r['date'].strftime('%Y-%m-%d')]+=1
+        question_rows.append({'date':r['date'].strftime('%d/%m/%Y %H:%M'),'user':r['username'],'message':r['message']})
 
 # Boxplot raw data
 box=[{'user':u,'lengths':lengths[u]} for u in users]
@@ -202,13 +221,13 @@ out={
  'weekday_user':[{'user':u,'weekday':w,'count':weekday_user[(u,w)]} for u in users for w in weekday_names if weekday_user[(u,w)]],
  'daily_user':series_daily,
  'daily_cum':series_cum,
- 'chars_user':[{'user':u,'chars':chars[u]} for u in sorted(users,key=lambda x:(-chars[x],x.lower()))],
  'lengths':box,
  'words':top_counter(word_counts,50),
  'trigrams':top_counter(trigram_counts,50),
  'user_words':user_word,
  'user_trigrams':user_tri,
  'question_day':[{'date':d,'count':question_day[d]} for d in sorted(question_day)],
+ 'question_rows':question_rows,
 }
 json.dumps(out,ensure_ascii=False)
 `;
@@ -241,21 +260,11 @@ function renderAll(a){
   const wd=groupSeries(a.weekday_user,'user');
   const order=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
   plot('chartWeekday',Object.entries(wd).map(([u,rs])=>{const map=Object.fromEntries(rs.map(r=>[r.weekday,r.count]));return {x:order,y:order.map(w=>map[w]||0),type:'bar',name:u}}),{...baseLayout('Mensajes enviados por día de la semana y usuario'),barmode:'stack'});
-  plot('chartUserBar',[{x:a.user_msg.map(x=>x.user),y:a.user_msg.map(x=>x.count),type:'bar'}],{...baseLayout('Número de mensajes enviados por usuario'),xaxis:{title:'Usuario'},yaxis:{title:'Número de mensajes'}});
   const du=groupSeries(a.daily_user,'user');
   plot('chartUserLine',Object.entries(du).map(([u,rs])=>({x:rs.map(r=>r.date),y:rs.map(r=>r.value),type:'scatter',mode:'lines',name:u})),baseLayout('Mensajes por usuario (no acumulativo)'));
   const dc=groupSeries(a.daily_cum,'user');
   plot('chartUserCum',Object.entries(dc).map(([u,rs])=>({x:rs.map(r=>r.date),y:rs.map(r=>r.value),type:'scatter',mode:'lines',name:u})),baseLayout('Mensajes por usuario (acumulativo)'));
-  plot('chartCharsLine',Object.entries(du).map(([u,rs])=>{
-    const vals=rs.map(r=>{const msgs=a.lengths.find(x=>x.user===u)?.lengths||[];return 0});
-    return {x:rs.map(r=>r.date),y:rs.map(r=>r.value),type:'scatter',mode:'lines',name:u};
-  }),{...baseLayout('Caracteres por usuario (evolución diaria)'),yaxis:{title:'Mensajes (la serie conserva el comportamiento temporal)'}});
-  const charCum={}; a.daily_user.forEach(r=>{charCum[r.user]??={};}); 
-  // Exact character cumulative series, reconstructed from the message rows is not in the compact result.
-  // We show total characters by user in a dedicated bar below instead.
-  plot('chartCharsCum',[{x:a.chars_user.map(x=>x.user),y:a.chars_user.map(x=>x.chars),type:'bar'}],{...baseLayout('Total de caracteres por usuario'),xaxis:{title:'Usuario'},yaxis:{title:'Caracteres'}});
   plot('chartLength',a.lengths.map(x=>({y:x.lengths,type:'box',name:x.user,boxpoints:false})),{...baseLayout('Longitud de mensajes por usuario'),yaxis:{title:'Caracteres'}});
-  plot('chartWords',[{x:a.words.slice(0,50).map(x=>x.key).reverse(),y:a.words.slice(0,50).map(x=>x.count).reverse(),type:'bar',orientation:'h'}],baseLayout('Palabras más frecuentes de todos los usuarios'));
   const uw=Object.entries(a.user_words);
   plot('chartWordsUser',uw.flatMap(([u,rs])=>[{x:rs.map(r=>r.key),y:rs.map(r=>r.count),type:'bar',name:u}]),{...baseLayout('Palabras más frecuentes de cada usuario'),barmode:'group'});
   plot('chartTrigrams',[{x:a.trigrams.slice(0,30).map(x=>x.key).reverse(),y:a.trigrams.slice(0,30).map(x=>x.count).reverse(),type:'bar',orientation:'h'}],baseLayout('Trigramas más frecuentes de todos los usuarios'));
@@ -265,6 +274,7 @@ function renderAll(a){
 
   renderWordCloud(a.words);
   renderTables(a);
+  renderQuestionTable(a.question_rows);
   renderProvinceInfo(a);
 }
 
@@ -331,6 +341,47 @@ document.getElementById('excelBtn').addEventListener('click',()=>{
   add('Trigramas por usuario',Object.entries(analysis.user_trigrams).flatMap(([u,rs])=>rs.map(x=>({Usuario:u,Trigrama:x.key,Frecuencia:x.count}))));
   add('Horas por usuario',analysis.hour_user.map(x=>({Usuario:x.user,Hora:x.hour,Mensajes:x.count})));
   add('Días semana',analysis.weekday_user.map(x=>({Usuario:x.user,Día:x.weekday,Mensajes:x.count})));
-  add('PreguntaRandom',analysis.question_day.map(x=>({Fecha:x.date,Frecuencia:x.count})));
+  add('PreguntaRandom',analysis.question_rows.map(x=>({Fecha:x.date,Usuario:x.user,Mensaje:x.message})));
   XLSX.writeFile(wb,'Estadísticas WhatsApp.xlsx');
 });
+
+
+// ---------- Descarga de gráficos ----------
+async function downloadChart(id, filename){
+  const el=document.getElementById(id);
+  if(!el || !el.data) return;
+  await Plotly.downloadImage(el,{format:'png',filename:filename,width:1600,height:900,scale:2});
+}
+
+function downloadChartHTML(id, filename){
+  const el=document.getElementById(id);
+  if(!el || !el.data) return;
+  const data=JSON.stringify(el.data);
+  const layout=JSON.stringify(el.layout);
+  const config=JSON.stringify({responsive:true,displaylogo:false});
+  const htmlDoc=`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${filename}</title><script src="https://cdn.plot.ly/plotly-2.35.2.min.js"><\/script></head><body><div id="chart" style="width:100%;height:95vh"></div><script>Plotly.newPlot("chart",${data},${layout},${config});<\/script></body></html>`;
+  const blob=new Blob([htmlDoc],{type:'text/html;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download=filename+'.html';a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ---------- #PreguntaRandom: conservar el texto completo ----------
+function renderQuestionTable(rows){
+  const target=document.getElementById('questionTable');
+  if(!rows || !rows.length){
+    target.innerHTML='<p class="muted">No se encontraron mensajes con #PreguntaRandom en el intervalo seleccionado.</p>';
+    return;
+  }
+  const tableRows=rows.map(r=>[r.date,r.user,r.message]);
+  target.innerHTML=htmlTable(
+    `Mensajes con #PreguntaRandom (${rows.length})`,
+    ['Fecha','Usuario','Mensaje'],
+    tableRows
+  );
+}
+
+function downloadWordCloudPNG(){
+  const c=document.getElementById('wordCloud'); if(!c) return;
+  const a=document.createElement('a'); a.href=c.toDataURL('image/png'); a.download='nube_de_palabras.png'; a.click();
+}

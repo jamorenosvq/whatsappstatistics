@@ -39,3 +39,8 @@ th{background:#f5f7fb;position:sticky;top:0}
 code{background:#f0f2f6;padding:2px 5px;border-radius:4px}
 footer{padding:28px 0;color:#687386;font-size:13px}
 @media(max-width:900px){.grid{grid-template-columns:1fr}.upload-row{flex-direction:column}.file-label{min-width:0}.section-title{align-items:flex-start;flex-direction:column}}
+
+.chart-head{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:4px 8px 0}
+.chart-head h3{margin:4px 0;font-size:15px}
+.chart-actions{display:flex;gap:6px}
+button.tiny{padding:6px 9px;font-size:11px;border-radius:7px}

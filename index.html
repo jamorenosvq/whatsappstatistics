@@ -35,11 +35,6 @@
       <label>Hasta <input id="endDate" type="date" value="2026-08-25"></label>
     </div>
 
-    <details>
-      <summary>Usuarios excluidos</summary>
-      <p id="excludedUsers"></p>
-    </details>
-
     <button id="runBtn" disabled>Analizar chat</button>
     <div id="status" class="status">Selecciona un fichero .txt.</div>
     <div id="progress" class="progress"><div></div></div>
@@ -53,25 +48,27 @@
       <button id="excelBtn" class="secondary">Descargar estadísticas en Excel</button>
     </div>
     <div class="grid">
-      <article class="card"><div id="chartDay"></div></article>
-      <article class="card"><div id="chartHour"></div></article>
-      <article class="card"><div id="chartWeekday"></div></article>
-      <article class="card"><div id="chartUserBar"></div></article>
-      <article class="card"><div id="chartUserLine"></div></article>
-      <article class="card"><div id="chartUserCum"></div></article>
-      <article class="card"><div id="chartCharsLine"></div></article>
-      <article class="card"><div id="chartCharsCum"></div></article>
-      <article class="card"><div id="chartLength"></div></article>
-      <article class="card"><div id="chartWords"></div></article>
-      <article class="card"><div id="chartWordsUser"></div></article>
-      <article class="card"><div id="chartTrigrams"></div></article>
-      <article class="card"><div id="chartTrigramsUser"></div></article>
-      <article class="card"><div id="chartQuestion"></div></article>
+      <article class="card chart-card"><div class="chart-head"><h3>Número de mensajes por día</h3><div class="chart-actions"><button class="tiny" onclick="downloadChart('chartDay','mensajes_por_dia')">PNG</button><button class="tiny secondary" onclick="downloadChartHTML('chartDay','mensajes_por_dia')">HTML</button></div></div><div id="chartDay"></div></article>
+      <article class="card chart-card"><div class="chart-head"><h3>Mensajes por hora y usuario</h3><div class="chart-actions"><button class="tiny" onclick="downloadChart('chartHour','mensajes_por_hora')">PNG</button><button class="tiny secondary" onclick="downloadChartHTML('chartHour','mensajes_por_hora')">HTML</button></div></div><div id="chartHour"></div></article>
+      <article class="card chart-card"><div class="chart-head"><h3>Mensajes por día de la semana</h3><div class="chart-actions"><button class="tiny" onclick="downloadChart('chartWeekday','mensajes_por_dia_semana')">PNG</button><button class="tiny secondary" onclick="downloadChartHTML('chartWeekday','mensajes_por_dia_semana')">HTML</button></div></div><div id="chartWeekday"></div></article>
+      <article class="card chart-card"><div class="chart-head"><h3>Mensajes por usuario (no acumulativo)</h3><div class="chart-actions"><button class="tiny" onclick="downloadChart('chartUserLine','mensajes_por_usuario_no_acumulativo')">PNG</button><button class="tiny secondary" onclick="downloadChartHTML('chartUserLine','mensajes_por_usuario_no_acumulativo')">HTML</button></div></div><div id="chartUserLine"></div></article>
+      <article class="card chart-card"><div class="chart-head"><h3>Mensajes por usuario (acumulativo)</h3><div class="chart-actions"><button class="tiny" onclick="downloadChart('chartUserCum','mensajes_por_usuario_acumulativo')">PNG</button><button class="tiny secondary" onclick="downloadChartHTML('chartUserCum','mensajes_por_usuario_acumulativo')">HTML</button></div></div><div id="chartUserCum"></div></article>
+      <article class="card chart-card"><div class="chart-head"><h3>Longitud de mensajes</h3><div class="chart-actions"><button class="tiny" onclick="downloadChart('chartLength','longitud_mensajes')">PNG</button><button class="tiny secondary" onclick="downloadChartHTML('chartLength','longitud_mensajes')">HTML</button></div></div><div id="chartLength"></div></article>
+      <article class="card chart-card"><div class="chart-head"><h3>Palabras más frecuentes por usuario</h3><div class="chart-actions"><button class="tiny" onclick="downloadChart('chartWordsUser','palabras_por_usuario')">PNG</button><button class="tiny secondary" onclick="downloadChartHTML('chartWordsUser','palabras_por_usuario')">HTML</button></div></div><div id="chartWordsUser"></div></article>
+      <article class="card chart-card"><div class="chart-head"><h3>Trigramas más frecuentes</h3><div class="chart-actions"><button class="tiny" onclick="downloadChart('chartTrigrams','trigramas_mas_frecuentes')">PNG</button><button class="tiny secondary" onclick="downloadChartHTML('chartTrigrams','trigramas_mas_frecuentes')">HTML</button></div></div><div id="chartTrigrams"></div></article>
+      <article class="card chart-card"><div class="chart-head"><h3>Trigramas más frecuentes por usuario</h3><div class="chart-actions"><button class="tiny" onclick="downloadChart('chartTrigramsUser','trigramas_por_usuario')">PNG</button><button class="tiny secondary" onclick="downloadChartHTML('chartTrigramsUser','trigramas_por_usuario')">HTML</button></div></div><div id="chartTrigramsUser"></div></article>
+      <article class="card chart-card"><div class="chart-head"><h3>Uso de #PreguntaRandom</h3><div class="chart-actions"><button class="tiny" onclick="downloadChart('chartQuestion','pregunta_random_por_dia')">PNG</button><button class="tiny secondary" onclick="downloadChartHTML('chartQuestion','pregunta_random_por_dia')">HTML</button></div></div><div id="chartQuestion"></div></article>
     </div>
 
     <article class="card wide">
-      <h3>Nube de palabras</h3>
+      <div class="chart-head"><h3>Nube de palabras</h3><div class="chart-actions"><button class="tiny" onclick="downloadWordCloudPNG()">PNG</button></div></div>
       <canvas id="wordCloud" width="1000" height="650"></canvas>
+    </article>
+
+    <article class="card wide">
+      <h3>#PreguntaRandom — detalle de mensajes</h3>
+      <p class="muted">Aquí se muestran los mensajes que contienen el hashtag, con el mismo tipo de detalle que se puede consultar en Excel.</p>
+      <div id="questionTable"></div>
     </article>
 
     <article class="card wide">
