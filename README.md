@@ -58,3 +58,17 @@ Para una versión más completa y más divertida del análisis añadiría:
 8. **Emojis más utilizados**, tanto globalmente como por usuario.
 9. **Mensajes con preguntas** (`¿...?`) y signos de exclamación por usuario.
 10. **#PreguntaRandom**: ranking de quién publica más, qué días se utiliza más y listado completo de preguntas.
+
+## Cambios de esta versión
+
+- Eliminada completamente la lista de usuarios excluidos: ahora se analizan todos los participantes del TXT.
+- Eliminados los gráficos de mensajes por usuario, evolución diaria de caracteres y total de caracteres por usuario.
+- Eliminado el gráfico global de palabras más frecuentes.
+- El análisis léxico aplica stopwords + limpieza + lematización morfológica antes de contar palabras y trigramas.
+- La misma versión preprocesada se utiliza en palabras por usuario, trigramas globales, trigramas por usuario, nube de palabras y tablas de palabras/trigramas.
+- `#PreguntaRandom` conserva el mensaje completo y se exporta a Excel.
+
+
+## Versión definitiva
+
+Incluye mapa de calor de actividad, ranking de emojis, récords del grupo, tabla completa de #PreguntaRandom, participación, mensajes por mes, media de caracteres y riqueza léxica. No hay lista de usuarios excluidos. Se han eliminado los gráficos solicitados y el análisis VADER. Las palabras, trigramas, tablas y nube usan el texto preprocesado con stopwords y lematización morfológica.

@@ -209,6 +209,28 @@ for r in rows:
 # Boxplot raw data
 box=[{'user':u,'lengths':lengths[u]} for u in users]
 
+# Estadísticas especiales
+month_counts=Counter(r['date'].strftime('%Y-%m') for r in rows)
+heat=Counter((weekday_names[r['date'].weekday()], r['date'].hour) for r in rows)
+participation=[{'user':u,'count':user_msg[u],'pct':round(user_msg[u]/len(rows)*100,2) if rows else 0} for u in users]
+avg_length=[{'user':u,'avg':round(sum(lengths[u])/len(lengths[u]),2) if lengths[u] else 0} for u in users]
+lexical=[]
+for u in users:
+    ts=tokens_for([r['message'] for r in rows if r['username']==u])
+    lexical.append({'user':u,'ratio':round(len(set(ts))/len(ts),4) if ts else 0})
+
+emoji_counts=Counter()
+for r in rows:
+    for e in re.findall(r'[\U0001F300-\U0001FAFF\U00002600-\U000027BF]', r['message']):
+        emoji_counts[e]+=1
+question_user=Counter(r['username'] for r in rows if '?' in r['message'] or '¿' in r['message'])
+most_active_day=max(day.items(),key=lambda x:x[1]) if day else ('—',0)
+most_active_hour=max(Counter(r['date'].hour for r in rows).items(),key=lambda x:x[1]) if rows else ('—',0)
+top_user=max(user_msg.items(),key=lambda x:x[1]) if user_msg else ('—',0)
+longest=max(rows,key=lambda r:len(r['message'])) if rows else {'username':'—','message':'','date':None}
+user_day=Counter((r['username'],r['date'].strftime('%Y-%m-%d')) for r in rows)
+most_user_day=max(user_day.items(),key=lambda x:x[1]) if user_day else (('—','—'),0)
+top_tri=max(trigram_counts.items(),key=lambda x:x[1]) if trigram_counts else (('—','—','—'),0)
 # Province information can be added later in JS from GR.xlsx.
 out={
  'meta': {'messages':len(rows),'users':len(users),
@@ -228,6 +250,23 @@ out={
  'user_trigrams':user_tri,
  'question_day':[{'date':d,'count':question_day[d]} for d in sorted(question_day)],
  'question_rows':question_rows,
+ 'month_counts':[{'month':d,'count':month_counts[d]} for d in sorted(month_counts)],
+ 'heatmap':[{'weekday':w,'hour':h,'count':heat[(w,h)]} for w in weekday_names for h in range(24)],
+ 'participation':participation,
+ 'avg_length':avg_length,
+ 'lexical':lexical,
+ 'emojis':[{'emoji':e,'count':n} for e,n in emoji_counts.most_common(30)],
+ 'question_user':[{'user':u,'count':question_user[u]} for u in sorted(users,key=lambda x:(-question_user[x],x.lower()))],
+ 'records':{
+   'day':[most_active_day[0],most_active_day[1]],
+   'hour':[most_active_hour[0],most_active_hour[1]],
+   'top_user':[top_user[0],top_user[1]],
+   'longest':[longest['username'],len(longest['message'])],
+   'user_day':[[most_user_day[0][0],most_user_day[0][1]],most_user_day[1]],
+   'trigram':[' '.join(top_tri[0]),top_tri[1]],
+   'emoji':[emoji_counts.most_common(1)[0][0],emoji_counts.most_common(1)[0][1]] if emoji_counts else ['—',0],
+   'question_random':len(question_rows)
+ }
 }
 json.dumps(out,ensure_ascii=False)
 `;
@@ -275,6 +314,7 @@ function renderAll(a){
   renderWordCloud(a.words);
   renderTables(a);
   renderQuestionTable(a.question_rows);
+  renderSpecialStats(a);
   renderProvinceInfo(a);
 }
 
@@ -305,6 +345,37 @@ function renderTables(a){
     htmlTable('Mensajes por usuario',['Usuario','Mensajes'],rows)+
     htmlTable('Palabras más frecuentes',['Palabra','Frecuencia'],a.words.map(x=>[x.key,x.count]))+
     htmlTable('Trigramas más frecuentes',['Trigrama','Frecuencia'],a.trigrams.map(x=>[x.key,x.count]));
+}
+
+function renderSpecialStats(a){
+  const days=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
+  const z=days.map(d=>Array.from({length:24},(_,hr)=>{
+    const x=a.heatmap.find(v=>v.weekday===d && v.hour===hr); return x?x.count:0;
+  }));
+  plot('chartHeatmap',[{z,x:Array.from({length:24},(_,i)=>i),y:days,type:'heatmap',hoverongaps:false}],{...baseLayout('Actividad del grupo: día × hora'),xaxis:{title:'Hora',dtick:1},yaxis:{title:'Día'}});
+
+  const p=[...a.participation].sort((x,y)=>y.count-x.count);
+  plot('chartParticipation',[{x:p.map(x=>x.user),y:p.map(x=>x.pct),type:'bar'}],{...baseLayout('Participación de cada usuario'),yaxis:{title:'Porcentaje del total',ticksuffix:'%'}});
+  plot('chartMonth',[{x:a.month_counts.map(x=>x.month),y:a.month_counts.map(x=>x.count),type:'bar'}],baseLayout('Mensajes por mes'));
+  const av=[...a.avg_length].sort((x,y)=>y.avg-x.avg);
+  plot('chartAvgLength',[{x:av.map(x=>x.user),y:av.map(x=>x.avg),type:'bar'}],{...baseLayout('Media de caracteres por mensaje'),yaxis:{title:'Caracteres'}});
+  const lx=[...a.lexical].sort((x,y)=>y.ratio-x.ratio);
+  plot('chartLexical',[{x:lx.map(x=>x.user),y:lx.map(x=>x.ratio),type:'bar'}],{...baseLayout('Riqueza léxica'),yaxis:{title:'Palabras únicas / palabras totales',tickformat:'.0%'}});
+  plot('chartEmoji',[{x:a.emojis.slice(0,20).map(x=>x.emoji).reverse(),y:a.emojis.slice(0,20).map(x=>x.count).reverse(),type:'bar',orientation:'h'}],baseLayout('Ranking de emojis'));
+  plot('chartQuestionsUser',[{x:a.question_user.map(x=>x.user),y:a.question_user.map(x=>x.count),type:'bar'}],baseLayout('Preguntas por usuario'));
+
+  const r=a.records;
+  const cards=[
+    ['📅',r.day[0],`Día con más mensajes: ${r.day[1].toLocaleString('es-ES')}`],
+    ['🕐',`${String(r.hour[0]).padStart(2,'0')}:00`, `Hora más activa: ${r.hour[1].toLocaleString('es-ES')} mensajes`],
+    ['🏆',r.top_user[0],`Usuario con más mensajes: ${r.top_user[1].toLocaleString('es-ES')}`],
+    ['✍️',r.longest[0],`Mensaje más largo: ${r.longest[1].toLocaleString('es-ES')} caracteres`],
+    ['🔥',r.user_day[0][0],`Récord diario: ${r.user_day[1].toLocaleString('es-ES')} mensajes (${r.user_day[0][1]})`],
+    ['🧠',r.trigram[0],`Trigrama más repetido: ${r.trigram[1].toLocaleString('es-ES')} veces`],
+    ['😂',r.emoji[0],`Emoji más utilizado: ${r.emoji[1].toLocaleString('es-ES')} veces`],
+    ['❓',r.question_random.toLocaleString('es-ES'),`Mensajes con #PreguntaRandom`]
+  ];
+  document.getElementById('records').innerHTML=cards.map(x=>`<div class="record"><div class="emoji">${escapeHtml(String(x[0]))}</div><div class="value">${escapeHtml(String(x[1]))}</div><div class="label">${escapeHtml(String(x[2]))}</div></div>`).join('');
 }
 
 function renderProvinceInfo(a){
@@ -342,6 +413,12 @@ document.getElementById('excelBtn').addEventListener('click',()=>{
   add('Horas por usuario',analysis.hour_user.map(x=>({Usuario:x.user,Hora:x.hour,Mensajes:x.count})));
   add('Días semana',analysis.weekday_user.map(x=>({Usuario:x.user,Día:x.weekday,Mensajes:x.count})));
   add('PreguntaRandom',analysis.question_rows.map(x=>({Fecha:x.date,Usuario:x.user,Mensaje:x.message})));
+  add('Participación',analysis.participation.map(x=>({Usuario:x.user,Mensajes:x.count,Porcentaje:x.pct})));
+  add('Media caracteres',analysis.avg_length.map(x=>({Usuario:x.user,MediaCaracteres:x.avg})));
+  add('Riqueza léxica',analysis.lexical.map(x=>({Usuario:x.user,RiquezaLexica:x.ratio})));
+  add('Emojis',analysis.emojis.map(x=>({Emoji:x.emoji,Frecuencia:x.count})));
+  add('Preguntas',analysis.question_user.map(x=>({Usuario:x.user,Preguntas:x.count})));
+  add('Mensajes por mes',analysis.month_counts.map(x=>({Mes:x.month,Mensajes:x.count})));
   XLSX.writeFile(wb,'Estadísticas WhatsApp.xlsx');
 });
 
@@ -384,4 +461,11 @@ function renderQuestionTable(rows){
 function downloadWordCloudPNG(){
   const c=document.getElementById('wordCloud'); if(!c) return;
   const a=document.createElement('a'); a.href=c.toDataURL('image/png'); a.download='nube_de_palabras.png'; a.click();
+}
+
+function downloadWordCloudHTML(){
+  const c=document.getElementById('wordCloud'); if(!c) return;
+  const data=c.toDataURL('image/png');
+  const doc=`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Nube de palabras</title></head><body style="margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#fff"><img src="${data}" style="max-width:100%;height:auto"></body></html>`;
+  const url=URL.createObjectURL(new Blob([doc],{type:'text/html;charset=utf-8'})); const a=document.createElement('a');a.href=url;a.download='nube_de_palabras.html';a.click();URL.revokeObjectURL(url);
 }

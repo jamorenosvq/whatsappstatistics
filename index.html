@@ -43,6 +43,20 @@
   <section id="summary" class="summary hidden"></section>
 
   <section id="results" class="hidden">
+    <section class="special-section">
+      <div class="section-title"><div><h2>Estadísticas especiales</h2><p class="muted">Actividad, participación, emojis y récords del grupo.</p></div></div>
+      <div id="records" class="records-grid"></div>
+      <div class="special-grid">
+        <article class="card chart-card"><div class="chart-head"><h3>Mapa de calor de actividad</h3><div class="chart-actions"><button class="tiny" onclick="downloadChart('chartHeatmap','mapa_calor_actividad')">PNG</button><button class="tiny secondary" onclick="downloadChartHTML('chartHeatmap','mapa_calor_actividad')">HTML</button></div></div><div id="chartHeatmap"></div></article>
+        <article class="card chart-card"><div class="chart-head"><h3>Ranking de participación</h3><div class="chart-actions"><button class="tiny" onclick="downloadChart('chartParticipation','ranking_participacion')">PNG</button><button class="tiny secondary" onclick="downloadChartHTML('chartParticipation','ranking_participacion')">HTML</button></div></div><div id="chartParticipation"></div></article>
+        <article class="card chart-card"><div class="chart-head"><h3>Mensajes por mes</h3><div class="chart-actions"><button class="tiny" onclick="downloadChart('chartMonth','mensajes_por_mes')">PNG</button><button class="tiny secondary" onclick="downloadChartHTML('chartMonth','mensajes_por_mes')">HTML</button></div></div><div id="chartMonth"></div></article>
+        <article class="card chart-card"><div class="chart-head"><h3>Media de caracteres por mensaje</h3><div class="chart-actions"><button class="tiny" onclick="downloadChart('chartAvgLength','media_caracteres')">PNG</button><button class="tiny secondary" onclick="downloadChartHTML('chartAvgLength','media_caracteres')">HTML</button></div></div><div id="chartAvgLength"></div></article>
+        <article class="card chart-card"><div class="chart-head"><h3>Riqueza léxica</h3><div class="chart-actions"><button class="tiny" onclick="downloadChart('chartLexical','riqueza_lexica')">PNG</button><button class="tiny secondary" onclick="downloadChartHTML('chartLexical','riqueza_lexica')">HTML</button></div></div><div id="chartLexical"></div></article>
+        <article class="card chart-card"><div class="chart-head"><h3>Ranking de emojis</h3><div class="chart-actions"><button class="tiny" onclick="downloadChart('chartEmoji','ranking_emojis')">PNG</button><button class="tiny secondary" onclick="downloadChartHTML('chartEmoji','ranking_emojis')">HTML</button></div></div><div id="chartEmoji"></div></article>
+        <article class="card chart-card"><div class="chart-head"><h3>Preguntas por usuario</h3><div class="chart-actions"><button class="tiny" onclick="downloadChart('chartQuestionsUser','preguntas_por_usuario')">PNG</button><button class="tiny secondary" onclick="downloadChartHTML('chartQuestionsUser','preguntas_por_usuario')">HTML</button></div></div><div id="chartQuestionsUser"></div></article>
+      </div>
+    </section>
+
     <div class="section-title">
       <h2>Gráficos</h2>
       <button id="excelBtn" class="secondary">Descargar estadísticas en Excel</button>
@@ -61,7 +75,7 @@
     </div>
 
     <article class="card wide">
-      <div class="chart-head"><h3>Nube de palabras</h3><div class="chart-actions"><button class="tiny" onclick="downloadWordCloudPNG()">PNG</button></div></div>
+      <div class="chart-head"><h3>Nube de palabras</h3><div class="chart-actions"><button class="tiny" onclick="downloadWordCloudPNG()">PNG</button><button class="tiny secondary" onclick="downloadWordCloudHTML()">HTML</button></div></div>
       <canvas id="wordCloud" width="1000" height="650"></canvas>
     </article>
 
