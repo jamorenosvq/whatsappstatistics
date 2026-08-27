@@ -48,5 +48,3 @@ button.tiny{padding:6px 9px;font-size:11px;border-radius:7px}
 .special-section{margin:8px 0 28px}.special-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.records-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin:15px 0 18px}.record{background:#fff;border:1px solid #e2e7ef;border-radius:12px;padding:15px;box-shadow:0 4px 16px rgba(23,32,51,.05)}.record .emoji{font-size:22px}.record .value{font-size:20px;font-weight:800;margin-top:5px;word-break:break-word}.record .label{font-size:12px;color:#687386;margin-top:4px}@media(max-width:900px){.special-grid{grid-template-columns:1fr}}
 
 #spainMap{height:620px;min-height:520px}.province-breakdown{margin-top:18px}.province-breakdown:empty{display:none}#emojiTable{max-height:520px;overflow:auto}.wide{grid-column:1/-1}@media(max-width:900px){#spainMap{height:500px}}
-
-.month-label{display:block;font-size:12px;color:#687386;margin-top:7px}.month-label select{margin-left:5px;padding:4px 7px;border:1px solid #cbd3df;border-radius:6px;background:#fff}.province-breakdown{margin:16px 0}.js-plotly-plot{min-height:430px}
