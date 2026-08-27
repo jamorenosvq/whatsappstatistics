@@ -9,7 +9,7 @@ const excelFile = document.getElementById('excelFile');
 const runBtn = document.getElementById('runBtn');
 const statusEl = document.getElementById('status');
 const progress = document.querySelector('#progress');
-const progressBar = progress.querySelector('div');
+const progressBar = progress ? progress.querySelector('div') : null;
 
 chatFile.addEventListener('change', async () => {
   const f = chatFile.files[0];
@@ -34,9 +34,21 @@ initPyodide().catch(e => statusEl.textContent = 'No se pudo cargar Python: '+e);
 runBtn.addEventListener('click', runAnalysis);
 
 async function runAnalysis(){
-  if(!chatText || !pyodide) return;
+  if(!chatText){
+    statusEl.textContent='Primero selecciona el fichero .txt del chat de WhatsApp.';
+    return;
+  }
   runBtn.disabled = true;
-  progress.style.display='block'; progressBar.style.width='10%';
+  if(progress){ progress.style.display='block'; if(progressBar) progressBar.style.width='10%'; }
+  try {
+    if(!pyodide) await initPyodide();
+  } catch(e) {
+    console.error(e);
+    statusEl.textContent='No se pudo cargar Python. Comprueba tu conexión a Internet y vuelve a intentarlo.';
+    alert('No se pudo cargar el motor Python. Comprueba la conexión a Internet y vuelve a pulsar «Analizar chat».');
+    runBtn.disabled=false;
+    return;
+  }
   statusEl.textContent='Analizando el chat…';
 
   const start = document.getElementById('startDate').value;
@@ -47,12 +59,12 @@ async function runAnalysis(){
     pyodide.globals.set('CHAT_TEXT', chatText);
     pyodide.globals.set('START_DATE', start);
     pyodide.globals.set('END_DATE', end);
-    progressBar.style.width='30%';
+    if(progressBar) progressBar.style.width='30%';
     const result = await pyodide.runPythonAsync(python);
-    progressBar.style.width='85%';
+    if(progressBar) progressBar.style.width='85%';
     analysis = JSON.parse(result);
     renderAll(analysis);
-    progressBar.style.width='100%';
+    if(progressBar) progressBar.style.width='100%';
     statusEl.textContent=`Análisis terminado: ${analysis.meta.messages.toLocaleString('es-ES')} mensajes de ${analysis.meta.users} usuarios.`;
     document.getElementById('results').classList.remove('hidden');
   }catch(e){
@@ -61,7 +73,7 @@ async function runAnalysis(){
     alert('Se ha producido un error. Abre F12 → Consola para ver los detalles.');
   }finally{
     runBtn.disabled=false;
-    setTimeout(()=>progress.style.display='none',500);
+    if(progress) setTimeout(()=>progress.style.display='none',500);
   }
 }
 
@@ -211,6 +223,7 @@ box=[{'user':u,'lengths':lengths[u]} for u in users]
 
 # Estadísticas especiales
 month_counts=Counter(r['date'].strftime('%Y-%m') for r in rows)
+month_user=Counter((r['date'].strftime('%Y-%m'),r['username']) for r in rows)
 heat=Counter((weekday_names[r['date'].weekday()], r['date'].hour) for r in rows)
 participation=[{'user':u,'count':user_msg[u],'pct':round(user_msg[u]/len(rows)*100,2) if rows else 0} for u in users]
 avg_words=[]
@@ -218,6 +231,11 @@ for u in users:
     msgs=[r['message'] for r in rows if r['username']==u]
     counts=[len(re.findall(r'[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+', clean(m))) for m in msgs]
     avg_words.append({'user':u,'avg':round(sum(counts)/len(counts),2) if counts else 0})
+monthly_participation=[]
+for month in sorted(month_counts):
+    total=month_counts[month]
+    for u in users:
+        monthly_participation.append({'month':month,'user':u,'count':month_user[(month,u)],'pct':round(month_user[(month,u)]/total*100,2) if total else 0})
 
 emoji_counts=Counter()
 for r in rows:
@@ -250,6 +268,7 @@ out={
  'question_day':[{'date':d,'count':question_day[d]} for d in sorted(question_day)],
  'question_rows':question_rows,
  'month_counts':[{'month':d,'count':month_counts[d]} for d in sorted(month_counts)],
+ 'monthly_participation':monthly_participation,
  'heatmap':[{'weekday':w,'hour':h,'count':heat[(w,h)]} for w in weekday_names for h in range(24)],
  'participation':participation,
  'avg_words':avg_words,
@@ -368,22 +387,34 @@ function renderTables(a){
 
 function renderSpecialStats(a){
   const days=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
-  const z=days.map(d=>Array.from({length:24},(_,hr)=>{
-    const x=a.heatmap.find(v=>v.weekday===d && v.hour===hr); return x?x.count:0;
-  }));
-  plot('chartHeatmap',[{z,x:Array.from({length:24},(_,i)=>i),y:days,type:'heatmap',hoverongaps:false}],{...baseLayout('Actividad del grupo: día × hora'),xaxis:{title:'Hora',dtick:1},yaxis:{title:'Día'}});
+  const z=days.map(d=>Array.from({length:24},(_,hr)=>{const x=a.heatmap.find(v=>v.weekday===d&&v.hour===hr);return x?x.count:0;}));
+  plot('chartHeatmap',[{z,x:Array.from({length:24},(_,i)=>i),y:days,type:'heatmap',hoverongaps:false,colorscale:'YlGnBu'}],{...baseLayout('Actividad del grupo: día × hora'),xaxis:{title:'Hora',dtick:1},yaxis:{title:'Día'}});
 
-  const p=[...a.participation].sort((x,y)=>y.count-x.count);
-  plot('chartParticipation',[{x:p.map(x=>x.user),y:p.map(x=>x.pct),type:'bar'}],{...baseLayout('Participación de cada usuario'),yaxis:{title:'Porcentaje del total',ticksuffix:'%'}});
+  // Participación mensual: selector + tarta con el % de mensajes de cada usuario sobre el total del mes.
+  const months=[...new Set(a.monthly_participation.map(x=>x.month))];
+  const sel=document.getElementById('participationMonth');
+  sel.innerHTML=months.map(m=>`<option value="${m}">${m}</option>`).join('');
+  const latest=months[months.length-1]||'';
+  sel.value=latest;
+  function drawParticipation(month){
+    const data=a.monthly_participation.filter(x=>x.month===month&&x.count>0).sort((x,y)=>y.count-x.count);
+    plot('chartParticipation',[{labels:data.map(x=>x.user),values:data.map(x=>x.count),type:'pie',hole:.28,textinfo:'label+percent',hovertemplate:'<b>%{label}</b><br>Mensajes: %{value}<br>%{percent}<extra></extra>'}],{...baseLayout(`Participación de cada usuario — ${month}`),showlegend:true,legend:{orientation:'v',x:1.02,y:1}});
+  }
+  sel.onchange=()=>drawParticipation(sel.value);
+  drawParticipation(latest);
+
   plot('chartMonth',[{x:a.month_counts.map(x=>x.month),y:a.month_counts.map(x=>x.count),type:'bar'}],baseLayout('Mensajes por mes'));
+
+  // Media de palabras por mensaje: barras verticales, ordenadas de mayor a menor.
   const av=[...a.avg_words].sort((x,y)=>y.avg-x.avg);
-  plot('chartAvgWords',[{x:av.map(x=>x.user),y:av.map(x=>x.avg),type:'bar'}],{...baseLayout('Media de palabras por mensaje por usuario'),yaxis:{title:'Palabras por mensaje'}});
-  document.getElementById('emojiTable').innerHTML=htmlTable('Emojis',['Emoji','Veces'],a.emojis.map(x=>[x.emoji,x.count]));
+  plot('chartAvgWords',[{x:av.map(x=>x.user),y:av.map(x=>x.avg),type:'bar',text:av.map(x=>x.avg.toFixed(2)),textposition:'outside',cliponaxis:false}],{...baseLayout('Media de palabras por mensaje por usuario'),xaxis:{title:'Usuario',categoryorder:'array',categoryarray:av.map(x=>x.user)},yaxis:{title:'Palabras por mensaje'},margin:{l:60,r:25,t:65,b:110}});
+
+  document.getElementById('emojiTable').innerHTML=htmlTable('Ranking de emojis',['Emoji','Veces'],a.emojis.map(x=>[x.emoji,x.count]));
 
   const r=a.records;
   const cards=[
     ['📅',r.day[0],`Día con más mensajes: ${r.day[1].toLocaleString('es-ES')}`],
-    ['🕐',`${String(r.hour[0]).padStart(2,'0')}:00`, `Hora más activa: ${r.hour[1].toLocaleString('es-ES')} mensajes`],
+    ['🕐',`${String(r.hour[0]).padStart(2,'0')}:00`,`Hora más activa: ${r.hour[1].toLocaleString('es-ES')} mensajes`],
     ['🏆',r.top_user[0],`Usuario con más mensajes: ${r.top_user[1].toLocaleString('es-ES')}`],
     ['✍️',r.longest[0],`Mensaje más largo: ${r.longest[1].toLocaleString('es-ES')} caracteres`],
     ['🔥',r.user_day[0][0],`Récord diario: ${r.user_day[1].toLocaleString('es-ES')} mensajes (${r.user_day[0][1]})`],
@@ -406,50 +437,102 @@ async function renderProvinceInfo(a){
   }
   try{
     const wb=XLSX.read(excelArrayBuffer,{type:'array'});
-    const first=wb.Sheets[wb.SheetNames[0]];
-    const data=XLSX.utils.sheet_to_json(first,{defval:''});
-    const contact={};
-    data.forEach(r=>{
-      const name=r.contacto??r.Contacto??r.usuario??r.Usuario??r.nombre??r.Nombre??'';
-      const prov=r.Provincia??r.provincia??'';
-      if(String(name).trim() && String(prov).trim()) contact[normText(name)]=String(prov).trim();
+    // Busca automáticamente la hoja que contenga username/contacto/provincia.
+    let data=[];
+    for(const sn of wb.SheetNames){
+      const rows=XLSX.utils.sheet_to_json(wb.Sheets[sn],{defval:''});
+      if(rows.some(r=>Object.keys(r).some(k=>normKey(k)==='username') && Object.keys(r).some(k=>normKey(k)==='contacto'))){data=rows;break}
+      if(!data.length && rows.some(r=>Object.keys(r).some(k=>normKey(k)==='provincia'))) data=rows;
+    }
+    if(!data.length) throw new Error('No encuentro en GR.xlsx las columnas username, contacto y Provincia.');
+
+    const keys=(r)=>Object.fromEntries(Object.entries(r).map(([k,v])=>[normKey(k),v]));
+    const rows=data.map(keys);
+    const userToContact=new Map(), contactToProvince=new Map(), userToProvince=new Map();
+    rows.forEach(r=>{
+      const username=String(r.username??'').trim();
+      const contacto=String(r.contacto??'').trim();
+      const provincia=String(r.provincia??'').trim();
+      if(username && contacto) userToContact.set(normKey(username),contacto);
+      if(contacto && provincia) contactToProvince.set(normKey(contacto),provincia);
+      if(username && provincia) userToProvince.set(normKey(username),provincia);
     });
-    const prov={}; const provUsers={};
+
+    // Primero resuelve teléfono/username -> contacto -> provincia; también admite coincidencia directa.
+    const prov={}, provUsers={};
     a.user_msg.forEach(u=>{
-      const p=contact[normText(u.user)];
-      if(!p)return;
-      prov[p]=(prov[p]||0)+u.count;
-      if(!provUsers[p])provUsers[p]=[];
-      provUsers[p].push({user:u.user,count:u.count});
+      const direct=userToProvince.get(normKey(u.user));
+      const contact=userToContact.get(normKey(u.user));
+      const p=direct || (contact ? contactToProvince.get(normKey(contact)) : undefined) || contactToProvince.get(normKey(u.user));
+      if(!p) return;
+      const canonical=canonicalProvince(p);
+      prov[canonical]=(prov[canonical]||0)+u.count;
+      (provUsers[canonical]??=[]).push({user:u.user,count:u.count});
     });
-    const arr=Object.entries(prov).sort((a,b)=>b[1]-a[1]);
-    notice.textContent='Provincias asignadas mediante GR.xlsx. Haz clic en una provincia del mapa para ver sus miembros.';
-    document.getElementById('provinceTable').innerHTML=htmlTable('Mensajes por provincia',['Provincia','Mensajes'],arr);
+
+    notice.textContent='Provincias asignadas desde GR.xlsx. Se incluyen también las provincias con 0 mensajes. Haz clic en una provincia para ver el desglose.';
     await renderSpainMap(prov,provUsers);
-  }catch(e){notice.textContent='No se pudo leer GR.xlsx: '+e}
+  }catch(e){notice.textContent='No se pudo leer GR.xlsx: '+e.message;}
+}
+
+function normKey(s){
+  return String(s??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
+}
+function canonicalProvince(s){
+  const k=normKey(s).replace(/[._-]+/g,' ');
+  const m={
+    'a coruna':'A Coruña','la coruna':'A Coruña','alava':'Álava','araba':'Álava','albacete':'Albacete','alicante':'Alicante','alacant':'Alicante','almeria':'Almería','asturias':'Asturias','avila':'Ávila','badajoz':'Badajoz','barcelona':'Barcelona','bizkaia':'Bizkaia','vizcaya':'Bizkaia','burgos':'Burgos','caceres':'Cáceres','cadiz':'Cádiz','cantabria':'Cantabria','castellon':'Castellón','castello':'Castellón','ciudad real':'Ciudad Real','cordoba':'Córdoba','cuenca':'Cuenca','gipuzkoa':'Gipuzkoa','guipuzcoa':'Gipuzkoa','girona':'Girona','gerona':'Girona','granada':'Granada','guadalajara':'Guadalajara','huelva':'Huelva','huesca':'Huesca','illes balears':'Illes Balears','islas baleares':'Illes Balears','baleares':'Illes Balears','jaen':'Jaén','leon':'León','lleida':'Lleida','la rioja':'La Rioja','rioja':'La Rioja','lugo':'Lugo','madrid':'Madrid','malaga':'Málaga','murcia':'Murcia','navarra':'Navarra','ourense':'Ourense','palencia':'Palencia','las palmas':'Las Palmas','pontevedra':'Pontevedra','salamanca':'Salamanca','santa cruz de tenerife':'Santa Cruz de Tenerife','segovia':'Segovia','sevilla':'Sevilla','soria':'Soria','tarragona':'Tarragona','teruel':'Teruel','toledo':'Toledo','valencia':'Valencia','valencia/valencia':'Valencia','valladolid':'Valladolid','zamora':'Zamora','zaragoza':'Zaragoza','ceuta':'Ceuta','melilla':'Melilla'
+  };
+  return m[k] || String(s).trim();
 }
 
 async function renderSpainMap(prov,provUsers){
-  const target=document.getElementById('spainMap');
   const geoUrl='https://raw.githubusercontent.com/codeforgermany/click_that_hood/main/public/data/spain-provinces.geojson';
-  const res=await fetch(geoUrl); const geo=await res.json();
-  const aliases={
-    'A Coruña':'A Coruña','La Coruña':'A Coruña','Alava':'Álava','Álava':'Álava','Albacete':'Albacete','Alicante':'Alicante','Almería':'Almería','Asturias':'Asturias','Avila':'Ávila','Ávila':'Ávila','Badajoz':'Badajoz','Barcelona':'Barcelona','Bizkaia':'Bizkaia','Vizcaya':'Bizkaia','Burgos':'Burgos','Cáceres':'Cáceres','Caceres':'Cáceres','Cádiz':'Cádiz','Cadiz':'Cádiz','Cantabria':'Cantabria','Castellón':'Castellón','Castellon':'Castellón','Ciudad Real':'Ciudad Real','Córdoba':'Córdoba','Cordoba':'Córdoba','Cuenca':'Cuenca','Gipuzkoa':'Gipuzkoa','Guipúzcoa':'Gipuzkoa','Girona':'Girona','Gerona':'Girona','Granada':'Granada','Guadalajara':'Guadalajara','Huelva':'Huelva','Huesca':'Huesca','Illes Balears':'Illes Balears','Baleares':'Illes Balears','Jaén':'Jaén','Jaen':'Jaén','León':'León','Leon':'León','Lleida':'Lleida','La Rioja':'La Rioja','Lugo':'Lugo','Madrid':'Madrid','Málaga':'Málaga','Malaga':'Málaga','Murcia':'Murcia','Navarra':'Navarra','Ourense':'Ourense','Palencia':'Palencia','Las Palmas':'Las Palmas','Pontevedra':'Pontevedra','Salamanca':'Salamanca','Santa Cruz de Tenerife':'Santa Cruz de Tenerife','Segovia':'Segovia','Sevilla':'Sevilla','Soria':'Soria','Tarragona':'Tarragona','Teruel':'Teruel','Toledo':'Toledo','Valencia':'Valencia','Valladolid':'Valladolid','Vizcaya':'Bizkaia','Zamora':'Zamora','Zaragoza':'Zaragoza','Ceuta':'Ceuta','Melilla':'Melilla'};
-  const valueFor=feature=>{
-    const props=feature.properties||{}; const name=props.name||props.NAMEUNIT||props.province||props.Provincia||props.NOMBRE||props.nombre||'';
-    const canonical=aliases[name]||aliases[Object.keys(aliases).find(k=>normText(k)===normText(name))]||name;
-    return {name:canonical,count:prov[canonical]||prov[Object.keys(prov).find(k=>normText(k)===normText(canonical))]||0};
-  };
-  const counts=geo.features.map(valueFor).map(x=>x.count); const max=Math.max(...counts,1);
-  const locations=geo.features.map((f,i)=>valueFor(f).name);
-  const z=geo.features.map((f,i)=>valueFor(f).count);
-  const mapDiv=document.getElementById('spainMap');
-  plot('spainMap',[{type:'choropleth',geojson:geo,locations:locations,z:z,featureidkey:'properties.name',text:locations,hovertemplate:'<b>%{text}</b><br>Mensajes: %{z}<extra></extra>',colorscale:[[0,'#eef3f8'],[0.2,'#c7d8ea'],[0.4,'#91b4d2'],[0.6,'#5f91b8'],[0.8,'#356b91'],[1,'#173f5f']],marker:{line:{color:'#fff',width:0.7}},colorbar:{title:'Mensajes'}}],{...baseLayout('Mensajes por provincia'),geo:{fitbounds:'locations',showland:true,showcoastlines:true,projection:{type:'mercator'}},margin:{l:0,r:0,t:55,b:0},clickmode:'event+select'});
-  mapDiv.on('plotly_click',ev=>{
-    const point=ev.points[0]; const province=point.text||point.location; const users=provUsers[province]||provUsers[Object.keys(provUsers).find(k=>normText(k)===normText(province))]||[];
-    const total=users.reduce((s,x)=>s+x.count,0); const sorted=[...users].sort((a,b)=>b.count-a.count);
-    document.getElementById('provinceBreakdown').innerHTML=htmlTable(`${escapeHtml(province)} — ${total.toLocaleString('es-ES')} mensajes`,['Miembro','Mensajes','% de la provincia'],sorted.map(x=>[x.user,x.count,((x.count/Math.max(total,1))*100).toFixed(2)+' %']));
+  const res=await fetch(geoUrl); if(!res.ok) throw new Error('No se pudo cargar el GeoJSON de provincias.');
+  const geo=await res.json();
+
+  // Normaliza el nombre del GeoJSON y usa una propiedad interna como clave inequívoca.
+  geo.features.forEach((f,i)=>{
+    const p=f.properties||{};
+    const raw=p.texto||p.name||p.NAMEUNIT||p.province||p.Provincia||p.NOMBRE||p.nombre||'';
+    p.map_name=canonicalProvince(raw);
+    f.properties=p;
   });
+  const names=geo.features.map(f=>f.properties.map_name);
+  const values=names.map(n=>Number(prov[n]||0));
+  const max=Math.max(...values,1);
+  const colorscale=[[0,'#f1f3f5'],[0.001,'#e6f0f7'],[0.10,'#c6ddeb'],[0.25,'#91bfd8'],[0.50,'#5c9bc1'],[0.75,'#3378a5'],[1,'#174b73']];
+
+  const trace={type:'choropleth',geojson:geo,locations:names,z:values,featureidkey:'properties.map_name',text:names,
+    hovertemplate:'<b>%{text}</b><br>Mensajes: %{z}<extra></extra>',zmin:0,zmax:max,colorscale,marker:{line:{color:'#1f2937',width:1.4}},colorbar:{title:'Mensajes',thickness:15}};
+
+  // Etiquetas numéricas en el centro aproximado de cada provincia.
+  function coords(feature){
+    const all=[];
+    const walk=c=>{if(typeof c[0]==='number')all.push(c);else c.forEach(walk)};
+    walk(feature.geometry.coordinates);
+    if(!all.length)return [0,0];
+    return [all.reduce((s,p)=>s+p[0],0)/all.length,all.reduce((s,p)=>s+p[1],0)/all.length];
+  }
+  const pts=geo.features.map((f,i)=>{const [lon,lat]=coords(f);return {lon,lat,name:names[i],value:values[i]};}).filter(x=>x.value>0);
+  const labelTrace={type:'scattergeo',lon:pts.map(x=>x.lon),lat:pts.map(x=>x.lat),text:pts.map(x=>String(x.value)),mode:'text',textfont:{size:10,color:'#111827'},hoverinfo:'skip',showlegend:false};
+
+  plot('spainMap',[trace,labelTrace],{...baseLayout('Mensajes por provincia'),geo:{fitbounds:'locations',showland:true,showcoastlines:true,showframe:false,bgcolor:'rgba(0,0,0,0)',projection:{type:'mercator'}},margin:{l:0,r:0,t:55,b:0},clickmode:'event+select'});
+  const mapDiv=document.getElementById('spainMap');
+  mapDiv.on('plotly_click',ev=>{
+    const pt=ev.points?.find(p=>p.data.type==='choropleth');
+    if(!pt)return;
+    const province=pt.location;
+    const users=provUsers[province]||[];
+    const total=Number(prov[province]||0);
+    const sorted=[...users].sort((a,b)=>b.count-a.count);
+    const title=`${escapeHtml(province)} — ${total.toLocaleString('es-ES')} mensajes`;
+    document.getElementById('provinceBreakdown').innerHTML=htmlTable(title,['Miembro','Mensajes','% de la provincia'],sorted.map(x=>[x.user,x.count,(x.count/Math.max(total,1)*100).toFixed(2)+' %']));
+  });
+
+  // Tabla de las 50 provincias/territorios del GeoJSON, incluidos los ceros.
+  const arr=names.map(n=>[n,Number(prov[n]||0)]).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0],'es'));
+  document.getElementById('provinceTable').innerHTML=htmlTable('Mensajes por provincia',['Provincia','Mensajes'],arr);
 }
 
 document.getElementById('excelBtn').addEventListener('click',()=>{
@@ -465,7 +548,7 @@ document.getElementById('excelBtn').addEventListener('click',()=>{
   add('Horas por usuario',analysis.hour_user.map(x=>({Usuario:x.user,Hora:x.hour,Mensajes:x.count})));
   add('Días semana',analysis.weekday_user.map(x=>({Usuario:x.user,Día:x.weekday,Mensajes:x.count})));
   add('PreguntaRandom',analysis.question_rows.map(x=>({Fecha:x.date,Usuario:x.user,Mensaje:x.message})));
-  add('Participación',analysis.participation.map(x=>({Usuario:x.user,Mensajes:x.count,Porcentaje:x.pct})));
+  add('Participación mensual',analysis.monthly_participation.map(x=>({Mes:x.month,Usuario:x.user,Mensajes:x.count,Porcentaje:x.pct})));
   add('Media palabras',analysis.avg_words.map(x=>({Usuario:x.user,MediaPalabras:x.avg})));
   add('Emojis',analysis.emojis.map(x=>({Emoji:x.emoji,Frecuencia:x.count})));
   add('Mensajes por mes',analysis.month_counts.map(x=>({Mes:x.month,Mensajes:x.count})));
