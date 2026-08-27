@@ -213,17 +213,16 @@ box=[{'user':u,'lengths':lengths[u]} for u in users]
 month_counts=Counter(r['date'].strftime('%Y-%m') for r in rows)
 heat=Counter((weekday_names[r['date'].weekday()], r['date'].hour) for r in rows)
 participation=[{'user':u,'count':user_msg[u],'pct':round(user_msg[u]/len(rows)*100,2) if rows else 0} for u in users]
-avg_length=[{'user':u,'avg':round(sum(lengths[u])/len(lengths[u]),2) if lengths[u] else 0} for u in users]
-lexical=[]
+avg_words=[]
 for u in users:
-    ts=tokens_for([r['message'] for r in rows if r['username']==u])
-    lexical.append({'user':u,'ratio':round(len(set(ts))/len(ts),4) if ts else 0})
+    msgs=[r['message'] for r in rows if r['username']==u]
+    counts=[len(re.findall(r'[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+', clean(m))) for m in msgs]
+    avg_words.append({'user':u,'avg':round(sum(counts)/len(counts),2) if counts else 0})
 
 emoji_counts=Counter()
 for r in rows:
     for e in re.findall(r'[\U0001F300-\U0001FAFF\U00002600-\U000027BF]', r['message']):
         emoji_counts[e]+=1
-question_user=Counter(r['username'] for r in rows if '?' in r['message'] or '¿' in r['message'])
 most_active_day=max(day.items(),key=lambda x:x[1]) if day else ('—',0)
 most_active_hour=max(Counter(r['date'].hour for r in rows).items(),key=lambda x:x[1]) if rows else ('—',0)
 top_user=max(user_msg.items(),key=lambda x:x[1]) if user_msg else ('—',0)
@@ -253,10 +252,8 @@ out={
  'month_counts':[{'month':d,'count':month_counts[d]} for d in sorted(month_counts)],
  'heatmap':[{'weekday':w,'hour':h,'count':heat[(w,h)]} for w in weekday_names for h in range(24)],
  'participation':participation,
- 'avg_length':avg_length,
- 'lexical':lexical,
+ 'avg_words':avg_words,
  'emojis':[{'emoji':e,'count':n} for e,n in emoji_counts.most_common(30)],
- 'question_user':[{'user':u,'count':question_user[u]} for u in sorted(users,key=lambda x:(-question_user[x],x.lower()))],
  'records':{
    'day':[most_active_day[0],most_active_day[1]],
    'hour':[most_active_hour[0],most_active_hour[1]],
@@ -311,28 +308,50 @@ function renderAll(a){
   plot('chartTrigramsUser',ut.flatMap(([u,rs])=>[{x:rs.map(r=>r.key),y:rs.map(r=>r.count),type:'bar',name:u}]),{...baseLayout('Trigramas más frecuentes por usuario'),barmode:'group'});
   plot('chartQuestion',[{x:a.question_day.map(x=>x.date),y:a.question_day.map(x=>x.count),type:'bar'}],baseLayout('Uso de #PreguntaRandom por día'));
 
-  renderWordCloud(a.words);
+  renderWordCloud(a.trigrams);
   renderTables(a);
   renderQuestionTable(a.question_rows);
   renderSpecialStats(a);
   renderProvinceInfo(a);
 }
 
-function renderWordCloud(words){
+function renderWordCloud(trigrams){
   const c=document.getElementById('wordCloud'),ctx=c.getContext('2d');
   ctx.clearRect(0,0,c.width,c.height);
-  const max=words[0]?.count||1;
-  const min=words[Math.min(words.length-1,49)]?.count||1;
-  const cols=5, rows=10;
-  words.slice(0,50).forEach((w,i)=>{
-    const col=i%cols,row=Math.floor(i/cols);
-    const x=80+col*(c.width-140)/cols;
-    const y=45+row*(c.height-90)/rows;
-    const size=14+42*((w.count-min)/Math.max(1,max-min));
-    ctx.font=`${Math.max(14,size)}px Arial`;
-    ctx.textAlign='center';ctx.textBaseline='middle';
-    ctx.fillText(w.key,x,y);
+  const arr=(trigrams||[]).slice(0,70);
+  const max=arr[0]?.count||1, min=arr[arr.length-1]?.count||1;
+  const palette=['#1f77b4','#d62728','#2ca02c','#9467bd','#ff7f0e','#17becf','#e377c2','#8c564b','#bcbd22'];
+  const placed=[];
+  function box(x,y,w,h){return {x:x-w/2,y:y-h/2,w,h}}
+  function overlap(a,b){return !(a.x+a.w<b.x||b.x+b.w<a.x||a.y+a.h<b.y||b.y+b.h<a.y)}
+  const shuffled=[...arr].sort(()=>Math.random()-.5);
+  shuffled.forEach((w,i)=>{
+    const size=Math.round(15+42*((w.count-min)/Math.max(1,max-min)));
+    ctx.font=`700 ${size}px Arial`;
+    const text=w.key, tw=ctx.measureText(text).width+10, th=size+10;
+    let ok=false,x=0,y=0;
+    for(let k=0;k<300;k++){
+      x=30+Math.random()*(c.width-60); y=30+Math.random()*(c.height-60);
+      const b=box(x,y,tw,th); if(b.x<5||b.y<5||b.x+b.w>c.width-5||b.y+b.h>c.height-5)continue;
+      if(!placed.some(q=>overlap(b,q))){placed.push(b);ok=true;break}
+    }
+    if(ok){ctx.fillStyle=palette[i%palette.length];ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(text,x,y)}
   });
+}
+
+function downloadWordCloudPNG(){
+  const c=document.getElementById('wordCloud'); const a=document.createElement('a'); a.href=c.toDataURL('image/png'); a.download='nube_de_trigramas.png'; a.click();
+}
+function downloadWordCloudHTML(){
+  const c=document.getElementById('wordCloud');
+  const img=c.toDataURL('image/png');
+  const doc=`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Nube de trigramas</title></head><body style="margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#fff"><img src="${img}" style="max-width:95vw;max-height:95vh"><\/body></html>`;
+  const a=document.createElement('a'),u=URL.createObjectURL(new Blob([doc],{type:'text/html'}));a.href=u;a.download='nube_de_trigramas.html';a.click();URL.revokeObjectURL(u);
+}
+function downloadEmojiCSV(){
+  if(!analysis)return; const esc=s=>'"'+String(s).replaceAll('"','""')+'"';
+  const out=['Emoji,Veces',...analysis.emojis.map(x=>esc(x.emoji)+','+x.count)].join('\n');
+  const a=document.createElement('a'),u=URL.createObjectURL(new Blob(['\ufeff'+out],{type:'text/csv;charset=utf-8'}));a.href=u;a.download='ranking_emojis.csv';a.click();URL.revokeObjectURL(u);
 }
 
 function htmlTable(title,headers,rows){
@@ -357,12 +376,9 @@ function renderSpecialStats(a){
   const p=[...a.participation].sort((x,y)=>y.count-x.count);
   plot('chartParticipation',[{x:p.map(x=>x.user),y:p.map(x=>x.pct),type:'bar'}],{...baseLayout('Participación de cada usuario'),yaxis:{title:'Porcentaje del total',ticksuffix:'%'}});
   plot('chartMonth',[{x:a.month_counts.map(x=>x.month),y:a.month_counts.map(x=>x.count),type:'bar'}],baseLayout('Mensajes por mes'));
-  const av=[...a.avg_length].sort((x,y)=>y.avg-x.avg);
-  plot('chartAvgLength',[{x:av.map(x=>x.user),y:av.map(x=>x.avg),type:'bar'}],{...baseLayout('Media de caracteres por mensaje'),yaxis:{title:'Caracteres'}});
-  const lx=[...a.lexical].sort((x,y)=>y.ratio-x.ratio);
-  plot('chartLexical',[{x:lx.map(x=>x.user),y:lx.map(x=>x.ratio),type:'bar'}],{...baseLayout('Riqueza léxica'),yaxis:{title:'Palabras únicas / palabras totales',tickformat:'.0%'}});
-  plot('chartEmoji',[{x:a.emojis.slice(0,20).map(x=>x.emoji).reverse(),y:a.emojis.slice(0,20).map(x=>x.count).reverse(),type:'bar',orientation:'h'}],baseLayout('Ranking de emojis'));
-  plot('chartQuestionsUser',[{x:a.question_user.map(x=>x.user),y:a.question_user.map(x=>x.count),type:'bar'}],baseLayout('Preguntas por usuario'));
+  const av=[...a.avg_words].sort((x,y)=>y.avg-x.avg);
+  plot('chartAvgWords',[{x:av.map(x=>x.user),y:av.map(x=>x.avg),type:'bar'}],{...baseLayout('Media de palabras por mensaje por usuario'),yaxis:{title:'Palabras por mensaje'}});
+  document.getElementById('emojiTable').innerHTML=htmlTable('Emojis',['Emoji','Veces'],a.emojis.map(x=>[x.emoji,x.count]));
 
   const r=a.records;
   const cards=[
@@ -378,26 +394,62 @@ function renderSpecialStats(a){
   document.getElementById('records').innerHTML=cards.map(x=>`<div class="record"><div class="emoji">${escapeHtml(String(x[0]))}</div><div class="value">${escapeHtml(String(x[1]))}</div><div class="label">${escapeHtml(String(x[2]))}</div></div>`).join('');
 }
 
-function renderProvinceInfo(a){
+function normText(s){return String(s??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim()}
+
+async function renderProvinceInfo(a){
   const notice=document.getElementById('provinceNotice');
   if(!excelArrayBuffer){
-    notice.textContent='No se ha cargado GR.xlsx. El resto del análisis funciona sin él. Si lo cargas, la página podrá asignar contacto y provincia y preparar el resumen provincial.';
+    notice.textContent='No se ha cargado GR.xlsx. Cárgalo para asignar cada miembro a una provincia y generar el mapa.';
+    document.getElementById('provinceTable').innerHTML='';
+    document.getElementById('provinceBreakdown').innerHTML='';
     return;
   }
   try{
     const wb=XLSX.read(excelArrayBuffer,{type:'array'});
     const first=wb.Sheets[wb.SheetNames[0]];
-    const data=XLSX.utils.sheet_to_json(first);
+    const data=XLSX.utils.sheet_to_json(first,{defval:''});
     const contact={};
-    data.forEach(r=>{if(r.contacto!=null){contact[String(r.contacto).trim()]=r.Provincia??''}});
-    const prov={};
-    a.user_msg.forEach(u=>{const p=contact[u.user]; if(p) prov[p]=(prov[p]||0)+u.count});
+    data.forEach(r=>{
+      const name=r.contacto??r.Contacto??r.usuario??r.Usuario??r.nombre??r.Nombre??'';
+      const prov=r.Provincia??r.provincia??'';
+      if(String(name).trim() && String(prov).trim()) contact[normText(name)]=String(prov).trim();
+    });
+    const prov={}; const provUsers={};
+    a.user_msg.forEach(u=>{
+      const p=contact[normText(u.user)];
+      if(!p)return;
+      prov[p]=(prov[p]||0)+u.count;
+      if(!provUsers[p])provUsers[p]=[];
+      provUsers[p].push({user:u.user,count:u.count});
+    });
     const arr=Object.entries(prov).sort((a,b)=>b[1]-a[1]);
-    notice.textContent='Provincias obtenidas a partir de GR.xlsx.';
+    notice.textContent='Provincias asignadas mediante GR.xlsx. Haz clic en una provincia del mapa para ver sus miembros.';
     document.getElementById('provinceTable').innerHTML=htmlTable('Mensajes por provincia',['Provincia','Mensajes'],arr);
-  }catch(e){
-    notice.textContent='No se pudo leer GR.xlsx: '+e;
-  }
+    await renderSpainMap(prov,provUsers);
+  }catch(e){notice.textContent='No se pudo leer GR.xlsx: '+e}
+}
+
+async function renderSpainMap(prov,provUsers){
+  const target=document.getElementById('spainMap');
+  const geoUrl='https://raw.githubusercontent.com/codeforgermany/click_that_hood/main/public/data/spain-provinces.geojson';
+  const res=await fetch(geoUrl); const geo=await res.json();
+  const aliases={
+    'A Coruña':'A Coruña','La Coruña':'A Coruña','Alava':'Álava','Álava':'Álava','Albacete':'Albacete','Alicante':'Alicante','Almería':'Almería','Asturias':'Asturias','Avila':'Ávila','Ávila':'Ávila','Badajoz':'Badajoz','Barcelona':'Barcelona','Bizkaia':'Bizkaia','Vizcaya':'Bizkaia','Burgos':'Burgos','Cáceres':'Cáceres','Caceres':'Cáceres','Cádiz':'Cádiz','Cadiz':'Cádiz','Cantabria':'Cantabria','Castellón':'Castellón','Castellon':'Castellón','Ciudad Real':'Ciudad Real','Córdoba':'Córdoba','Cordoba':'Córdoba','Cuenca':'Cuenca','Gipuzkoa':'Gipuzkoa','Guipúzcoa':'Gipuzkoa','Girona':'Girona','Gerona':'Girona','Granada':'Granada','Guadalajara':'Guadalajara','Huelva':'Huelva','Huesca':'Huesca','Illes Balears':'Illes Balears','Baleares':'Illes Balears','Jaén':'Jaén','Jaen':'Jaén','León':'León','Leon':'León','Lleida':'Lleida','La Rioja':'La Rioja','Lugo':'Lugo','Madrid':'Madrid','Málaga':'Málaga','Malaga':'Málaga','Murcia':'Murcia','Navarra':'Navarra','Ourense':'Ourense','Palencia':'Palencia','Las Palmas':'Las Palmas','Pontevedra':'Pontevedra','Salamanca':'Salamanca','Santa Cruz de Tenerife':'Santa Cruz de Tenerife','Segovia':'Segovia','Sevilla':'Sevilla','Soria':'Soria','Tarragona':'Tarragona','Teruel':'Teruel','Toledo':'Toledo','Valencia':'Valencia','Valladolid':'Valladolid','Vizcaya':'Bizkaia','Zamora':'Zamora','Zaragoza':'Zaragoza','Ceuta':'Ceuta','Melilla':'Melilla'};
+  const valueFor=feature=>{
+    const props=feature.properties||{}; const name=props.name||props.NAMEUNIT||props.province||props.Provincia||props.NOMBRE||props.nombre||'';
+    const canonical=aliases[name]||aliases[Object.keys(aliases).find(k=>normText(k)===normText(name))]||name;
+    return {name:canonical,count:prov[canonical]||prov[Object.keys(prov).find(k=>normText(k)===normText(canonical))]||0};
+  };
+  const counts=geo.features.map(valueFor).map(x=>x.count); const max=Math.max(...counts,1);
+  const locations=geo.features.map((f,i)=>valueFor(f).name);
+  const z=geo.features.map((f,i)=>valueFor(f).count);
+  const mapDiv=document.getElementById('spainMap');
+  plot('spainMap',[{type:'choropleth',geojson:geo,locations:locations,z:z,featureidkey:'properties.name',text:locations,hovertemplate:'<b>%{text}</b><br>Mensajes: %{z}<extra></extra>',colorscale:[[0,'#eef3f8'],[0.2,'#c7d8ea'],[0.4,'#91b4d2'],[0.6,'#5f91b8'],[0.8,'#356b91'],[1,'#173f5f']],marker:{line:{color:'#fff',width:0.7}},colorbar:{title:'Mensajes'}}],{...baseLayout('Mensajes por provincia'),geo:{fitbounds:'locations',showland:true,showcoastlines:true,projection:{type:'mercator'}},margin:{l:0,r:0,t:55,b:0},clickmode:'event+select'});
+  mapDiv.on('plotly_click',ev=>{
+    const point=ev.points[0]; const province=point.text||point.location; const users=provUsers[province]||provUsers[Object.keys(provUsers).find(k=>normText(k)===normText(province))]||[];
+    const total=users.reduce((s,x)=>s+x.count,0); const sorted=[...users].sort((a,b)=>b.count-a.count);
+    document.getElementById('provinceBreakdown').innerHTML=htmlTable(`${escapeHtml(province)} — ${total.toLocaleString('es-ES')} mensajes`,['Miembro','Mensajes','% de la provincia'],sorted.map(x=>[x.user,x.count,((x.count/Math.max(total,1))*100).toFixed(2)+' %']));
+  });
 }
 
 document.getElementById('excelBtn').addEventListener('click',()=>{
@@ -414,10 +466,8 @@ document.getElementById('excelBtn').addEventListener('click',()=>{
   add('Días semana',analysis.weekday_user.map(x=>({Usuario:x.user,Día:x.weekday,Mensajes:x.count})));
   add('PreguntaRandom',analysis.question_rows.map(x=>({Fecha:x.date,Usuario:x.user,Mensaje:x.message})));
   add('Participación',analysis.participation.map(x=>({Usuario:x.user,Mensajes:x.count,Porcentaje:x.pct})));
-  add('Media caracteres',analysis.avg_length.map(x=>({Usuario:x.user,MediaCaracteres:x.avg})));
-  add('Riqueza léxica',analysis.lexical.map(x=>({Usuario:x.user,RiquezaLexica:x.ratio})));
+  add('Media palabras',analysis.avg_words.map(x=>({Usuario:x.user,MediaPalabras:x.avg})));
   add('Emojis',analysis.emojis.map(x=>({Emoji:x.emoji,Frecuencia:x.count})));
-  add('Preguntas',analysis.question_user.map(x=>({Usuario:x.user,Preguntas:x.count})));
   add('Mensajes por mes',analysis.month_counts.map(x=>({Mes:x.month,Mensajes:x.count})));
   XLSX.writeFile(wb,'Estadísticas WhatsApp.xlsx');
 });

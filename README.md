@@ -1,74 +1,33 @@
-# Estadísticas de WhatsApp para GitHub Pages
+# Estadísticas de WhatsApp — GitHub Pages
 
-## Qué hace
-
-Esta página permite seleccionar una exportación `.txt` de WhatsApp y ejecutar el análisis en el navegador mediante Pyodide (Python en WebAssembly).
-
-Se han conservado las partes de análisis estadístico del código proporcionado y se ha excluido completamente el bloque de análisis de sentimiento con VADER.
-
-Además se ha añadido:
-
-- Trigramas más frecuentes por usuario.
-- Exportación de las tablas principales a Excel.
-- Filtro de fechas configurable.
-- Carga opcional de `GR.xlsx` para asociar nombres/provincias.
-- El TXT permanece en el navegador; no se envía a un servidor propio.
-
-## Publicar en GitHub Pages
-
-1. Crea un repositorio en GitHub.
-2. Sube `index.html`, `styles.css` y `app.js` a la raíz.
-3. En **Settings → Pages**, selecciona **Deploy from a branch**, la rama `main` y la carpeta `/ (root)`.
-4. Guarda y espera a que GitHub publique la página.
-
-No hace falta ejecutar Python en GitHub: Pyodide descarga el intérprete de Python al navegador y ejecuta allí el análisis.
-
-## Importante sobre GR.xlsx
-
-Tu código original depende de `GR.xlsx` para convertir `username` a `contacto` y para asignar `Provincia`. Por eso esta versión permite cargarlo opcionalmente junto al TXT. Si no lo cargas, el análisis sigue funcionando con los nombres tal como aparecen en el TXT, pero no puede conocer las provincias.
-
-## VADER
-
-El bloque comprendido entre `ANÁLISIS DE SENTIMIENTO CON VADER` y su tabla se ha eliminado, por lo que no se genera ninguna métrica de sentimiento.
-
-
-## Descarga de gráficos
-
-Cada gráfico tiene botones para:
-- Descargarlo como PNG en alta resolución.
-- Descargarlo como HTML interactivo.
-
-El HTML descargado conserva la interactividad de Plotly y puede abrirse sin que exista el repositorio.
-
-## #PreguntaRandom
-
-La página muestra una tabla con Fecha, Usuario y Mensaje de todos los mensajes que contienen `#PreguntaRandom`, además del gráfico diario. La misma información se incluye en la hoja `PreguntaRandom` del Excel.
-
-## Estadísticas adicionales que recomiendo
-
-Para una versión más completa y más divertida del análisis añadiría:
-
-1. **Mapa de calor día de la semana × hora**: probablemente uno de los gráficos más vistosos para ver cuándo está más activo el grupo.
-2. **Porcentaje de participación de cada usuario**: qué parte del total de mensajes aporta cada persona.
-3. **Mensajes por mes**: permite detectar épocas de máxima actividad.
-4. **Media de caracteres por mensaje por usuario**: diferencia entre quien escribe mucho y quien escribe mensajes largos.
-5. **Récords del grupo**: día con más mensajes, hora más activa, usuario con más mensajes, mensaje más largo y día de mayor actividad.
-6. **Top de palabras y trigramas por usuario**: ya incluido; sirve para ver el “vocabulario característico” de cada persona.
-7. **Índice de diversidad léxica** (por ejemplo, palabras únicas / palabras totales): una estadística curiosa para comparar estilos de escritura.
-8. **Emojis más utilizados**, tanto globalmente como por usuario.
-9. **Mensajes con preguntas** (`¿...?`) y signos de exclamación por usuario.
-10. **#PreguntaRandom**: ranking de quién publica más, qué días se utiliza más y listado completo de preguntas.
+Versión actualizada de la página para analizar una exportación `.txt` de WhatsApp directamente en el navegador.
 
 ## Cambios de esta versión
 
-- Eliminada completamente la lista de usuarios excluidos: ahora se analizan todos los participantes del TXT.
-- Eliminados los gráficos de mensajes por usuario, evolución diaria de caracteres y total de caracteres por usuario.
-- Eliminado el gráfico global de palabras más frecuentes.
-- El análisis léxico aplica stopwords + limpieza + lematización morfológica antes de contar palabras y trigramas.
-- La misma versión preprocesada se utiliza en palabras por usuario, trigramas globales, trigramas por usuario, nube de palabras y tablas de palabras/trigramas.
-- `#PreguntaRandom` conserva el mensaje completo y se exporta a Excel.
+- Eliminada **Riqueza léxica**.
+- Eliminado **Preguntas por usuario**.
+- **Media de palabras por mensaje por usuario**, ordenada de mayor a menor.
+- **Participación de cada usuario** mediante gráfico circular de tarta.
+- **Ranking de emojis** convertido en tabla con emoji y número de usos.
+- La nube pasa a ser una **nube de trigramas**, con posiciones aleatorias, tamaños proporcionales a frecuencia y colores variados.
+- Añadido **mapa interactivo de España por provincias**.
+  - Cada provincia se colorea según el número de mensajes.
+  - Al hacer clic en una provincia aparece el desglose por miembro.
+  - El desglose muestra mensajes y porcentaje que representa cada miembro sobre el total de esa provincia.
+  - Se mantiene también la tabla de mensajes por provincia.
 
+## Requisitos para el mapa provincial
 
-## Versión definitiva
+Hay que cargar `GR.xlsx` con una columna de contacto/usuario y otra llamada `Provincia` (la versión actual admite varias variantes razonables de esos encabezados).
 
-Incluye mapa de calor de actividad, ranking de emojis, récords del grupo, tabla completa de #PreguntaRandom, participación, mensajes por mes, media de caracteres y riqueza léxica. No hay lista de usuarios excluidos. Se han eliminado los gráficos solicitados y el análisis VADER. Las palabras, trigramas, tablas y nube usan el texto preprocesado con stopwords y lematización morfológica.
+El mapa utiliza límites provinciales GeoJSON y se muestra mediante Plotly. La página necesita conexión a Internet para cargar Pyodide, Plotly, SheetJS y el GeoJSON provincial.
+
+## Preprocesamiento
+
+Palabras, trigramas, tablas y nube utilizan el texto preprocesado: minúsculas, eliminación de URLs/ruido, stopwords españolas y lematización morfológica conservadora antes de calcular las frecuencias.
+
+No se ejecuta VADER ni análisis de sentimiento.
+
+## Publicación
+
+Sube `index.html`, `styles.css`, `app.js` y `README.md` a la raíz del repositorio de GitHub Pages.

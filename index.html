@@ -50,10 +50,8 @@
         <article class="card chart-card"><div class="chart-head"><h3>Mapa de calor de actividad</h3><div class="chart-actions"><button class="tiny" onclick="downloadChart('chartHeatmap','mapa_calor_actividad')">PNG</button><button class="tiny secondary" onclick="downloadChartHTML('chartHeatmap','mapa_calor_actividad')">HTML</button></div></div><div id="chartHeatmap"></div></article>
         <article class="card chart-card"><div class="chart-head"><h3>Ranking de participación</h3><div class="chart-actions"><button class="tiny" onclick="downloadChart('chartParticipation','ranking_participacion')">PNG</button><button class="tiny secondary" onclick="downloadChartHTML('chartParticipation','ranking_participacion')">HTML</button></div></div><div id="chartParticipation"></div></article>
         <article class="card chart-card"><div class="chart-head"><h3>Mensajes por mes</h3><div class="chart-actions"><button class="tiny" onclick="downloadChart('chartMonth','mensajes_por_mes')">PNG</button><button class="tiny secondary" onclick="downloadChartHTML('chartMonth','mensajes_por_mes')">HTML</button></div></div><div id="chartMonth"></div></article>
-        <article class="card chart-card"><div class="chart-head"><h3>Media de caracteres por mensaje</h3><div class="chart-actions"><button class="tiny" onclick="downloadChart('chartAvgLength','media_caracteres')">PNG</button><button class="tiny secondary" onclick="downloadChartHTML('chartAvgLength','media_caracteres')">HTML</button></div></div><div id="chartAvgLength"></div></article>
-        <article class="card chart-card"><div class="chart-head"><h3>Riqueza léxica</h3><div class="chart-actions"><button class="tiny" onclick="downloadChart('chartLexical','riqueza_lexica')">PNG</button><button class="tiny secondary" onclick="downloadChartHTML('chartLexical','riqueza_lexica')">HTML</button></div></div><div id="chartLexical"></div></article>
-        <article class="card chart-card"><div class="chart-head"><h3>Ranking de emojis</h3><div class="chart-actions"><button class="tiny" onclick="downloadChart('chartEmoji','ranking_emojis')">PNG</button><button class="tiny secondary" onclick="downloadChartHTML('chartEmoji','ranking_emojis')">HTML</button></div></div><div id="chartEmoji"></div></article>
-        <article class="card chart-card"><div class="chart-head"><h3>Preguntas por usuario</h3><div class="chart-actions"><button class="tiny" onclick="downloadChart('chartQuestionsUser','preguntas_por_usuario')">PNG</button><button class="tiny secondary" onclick="downloadChartHTML('chartQuestionsUser','preguntas_por_usuario')">HTML</button></div></div><div id="chartQuestionsUser"></div></article>
+        <article class="card chart-card"><div class="chart-head"><h3>Media de palabras por mensaje</h3><div class="chart-actions"><button class="tiny" onclick="downloadChart('chartAvgWords','media_palabras_por_mensaje')">PNG</button><button class="tiny secondary" onclick="downloadChartHTML('chartAvgWords','media_palabras_por_mensaje')">HTML</button></div></div><div id="chartAvgWords"></div></article>
+        <article class="card wide"><div class="chart-head"><h3>Ranking de emojis</h3><button class="tiny" onclick="downloadEmojiCSV()">CSV</button></div><div id="emojiTable"></div></article>
       </div>
     </section>
 
@@ -75,7 +73,7 @@
     </div>
 
     <article class="card wide">
-      <div class="chart-head"><h3>Nube de palabras</h3><div class="chart-actions"><button class="tiny" onclick="downloadWordCloudPNG()">PNG</button><button class="tiny secondary" onclick="downloadWordCloudHTML()">HTML</button></div></div>
+      <div class="chart-head"><h3>Nube de trigramas</h3><div class="chart-actions"><button class="tiny" onclick="downloadWordCloudPNG()">PNG</button><button class="tiny secondary" onclick="downloadWordCloudHTML()">HTML</button></div></div>
       <canvas id="wordCloud" width="1000" height="650"></canvas>
     </article>
 
@@ -86,8 +84,11 @@
     </article>
 
     <article class="card wide">
+      <div class="chart-head"><h3>Mapa de España por provincias</h3><span class="muted">Haz clic en una provincia para ver el desglose por miembro.</span></div>
+      <p id="provinceNotice" class="muted">Carga GR.xlsx para asignar cada miembro a una provincia.</p>
+      <div id="spainMap"></div>
+      <div id="provinceBreakdown" class="province-breakdown"></div>
       <h3>Mensajes por provincia</h3>
-      <p id="provinceNotice" class="muted">Para este gráfico puedes cargar GR.xlsx, con las columnas <code>contacto</code> y <code>Provincia</code>.</p>
       <div id="provinceTable"></div>
     </article>
 
