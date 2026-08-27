@@ -31,11 +31,3 @@ No se ejecuta VADER ni análisis de sentimiento.
 ## Publicación
 
 Sube `index.html`, `styles.css`, `app.js` y `README.md` a la raíz del repositorio de GitHub Pages.
-
-
-### Correcciones de la v4
-
-- Participación: gráfico circular mensual, con selector de mes; cada porcentaje es mensajes del usuario / mensajes totales del grupo en ese mes.
-- Media de palabras: barras verticales ordenadas de mayor a menor.
-- Emojis: tabla.
-- Mapa provincial: resolución robusta username → contacto → provincia, nombres provinciales normalizados, límites negros visibles, escala cromática contrastada, etiquetas numéricas y desglose al hacer clic.
