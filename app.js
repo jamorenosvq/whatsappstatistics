@@ -430,51 +430,106 @@ function normText(s){return String(s??'').normalize('NFD').replace(/[\u0300-\u03
 async function renderProvinceInfo(a){
   const notice=document.getElementById('provinceNotice');
   if(!excelArrayBuffer){
-    notice.textContent='No se ha cargado GR.xlsx. Cárgalo para asignar cada miembro a una provincia y generar el mapa.';
+    notice.innerHTML='No se ha cargado <b>GR.xlsx</b>. Cárgalo para asignar cada miembro a una provincia y generar el mapa.';
     document.getElementById('provinceTable').innerHTML='';
     document.getElementById('provinceBreakdown').innerHTML='';
     return;
   }
   try{
     const wb=XLSX.read(excelArrayBuffer,{type:'array'});
-    // Busca automáticamente la hoja que contenga username/contacto/provincia.
     let data=[];
+    // No asumimos una hoja concreta. Buscamos la que tenga datos de usuario/provincia.
     for(const sn of wb.SheetNames){
-      const rows=XLSX.utils.sheet_to_json(wb.Sheets[sn],{defval:''});
-      if(rows.some(r=>Object.keys(r).some(k=>normKey(k)==='username') && Object.keys(r).some(k=>normKey(k)==='contacto'))){data=rows;break}
-      if(!data.length && rows.some(r=>Object.keys(r).some(k=>normKey(k)==='provincia'))) data=rows;
+      const rows=XLSX.utils.sheet_to_json(wb.Sheets[sn],{defval:'',raw:false});
+      if(!rows.length) continue;
+      const normalizedKeys=new Set(Object.keys(rows[0]).map(normKey));
+      const hasProv=normalizedKeys.has('provincia');
+      const hasUser=normalizedKeys.has('username')||normalizedKeys.has('usuario')||normalizedKeys.has('telefono')||normalizedKeys.has('numero')||normalizedKeys.has('contacto')||normalizedKeys.has('nombre');
+      if(hasProv && hasUser){ data=rows; break; }
     }
-    if(!data.length) throw new Error('No encuentro en GR.xlsx las columnas username, contacto y Provincia.');
+    if(!data.length) throw new Error('No encuentro en GR.xlsx una tabla con una columna de Provincia y una columna de usuario/contacto/telefono.');
 
-    const keys=(r)=>Object.fromEntries(Object.entries(r).map(([k,v])=>[normKey(k),v]));
-    const rows=data.map(keys);
+    const rows=data.map(r=>Object.fromEntries(Object.entries(r).map(([k,v])=>[normKey(k),String(v??'').trim()])));
     const userToContact=new Map(), contactToProvince=new Map(), userToProvince=new Map();
+    const allAliases=new Map();
+
+    function addAlias(map,key,value){
+      if(!key || !value) return;
+      if(!map.has(key) || !map.get(key)) map.set(key,value);
+    }
+    function aliases(s){
+      const raw=String(s??'').trim();
+      if(!raw) return [];
+      const n=normKey(raw);
+      const out=new Set([n]);
+      // Normalización especialmente importante para teléfonos exportados de WhatsApp.
+      const digits=raw.replace(/\D/g,'');
+      if(digits){
+        out.add(digits);
+        if(digits.length>=9) out.add(digits.slice(-9));
+        if(digits.length>=10 && digits.startsWith('34')) out.add(digits.slice(2));
+      }
+      // Variantes de WhatsApp/Excel frecuentes.
+      const stripped=raw.replace(/^\s*whatsapp\s*[:\-]?\s*/i,'').replace(/@c\.us$/i,'').replace(/@s\.whatsapp\.net$/i,'');
+      const ns=normKey(stripped); if(ns) out.add(ns);
+      return [...out].filter(Boolean);
+    }
+
     rows.forEach(r=>{
-      const username=String(r.username??'').trim();
-      const contacto=String(r.contacto??'').trim();
-      const provincia=String(r.provincia??'').trim();
-      if(username && contacto) userToContact.set(normKey(username),contacto);
-      if(contacto && provincia) contactToProvince.set(normKey(contacto),provincia);
-      if(username && provincia) userToProvince.set(normKey(username),provincia);
+      const username=r.username||r.usuario||r.telefono||r.numero||r.phone||'';
+      const contacto=r.contacto||r.nombre||r.name||'';
+      const provincia=r.provincia||r.province||'';
+      if(username && contacto) aliases(username).forEach(k=>addAlias(userToContact,k,contacto));
+      if(contacto && provincia) aliases(contacto).forEach(k=>addAlias(contactToProvince,k,provincia));
+      if(username && provincia) aliases(username).forEach(k=>addAlias(userToProvince,k,provincia));
+      // También guardamos cualquier alias de la fila que tenga provincia.
+      if(provincia){
+        [username,contacto].forEach(v=>aliases(v).forEach(k=>addAlias(allAliases,k,provincia)));
+      }
     });
 
-    // Primero resuelve teléfono/username -> contacto -> provincia; también admite coincidencia directa.
     const prov={}, provUsers={};
+    const unmatched=[];
     a.user_msg.forEach(u=>{
-      const direct=userToProvince.get(normKey(u.user));
-      const contact=userToContact.get(normKey(u.user));
-      const p=direct || (contact ? contactToProvince.get(normKey(contact)) : undefined) || contactToProvince.get(normKey(u.user));
-      if(!p) return;
+      const candidates=aliases(u.user);
+      let p=null, matchedBy='';
+      for(const k of candidates){
+        if(userToProvince.has(k)){p=userToProvince.get(k);matchedBy='usuario';break;}
+      }
+      if(!p){
+        let contact=null;
+        for(const k of candidates){ if(userToContact.has(k)){contact=userToContact.get(k);break;} }
+        if(contact){
+          for(const k of aliases(contact)){ if(contactToProvince.has(k)){p=contactToProvince.get(k);matchedBy='contacto';break;} }
+        }
+      }
+      if(!p){
+        for(const k of candidates){ if(contactToProvince.has(k)){p=contactToProvince.get(k);matchedBy='contacto directo';break;} }
+      }
+      if(!p){
+        for(const k of candidates){ if(allAliases.has(k)){p=allAliases.get(k);matchedBy='alias';break;} }
+      }
+      if(!p){unmatched.push({user:u.user,count:u.count});return;}
       const canonical=canonicalProvince(p);
       prov[canonical]=(prov[canonical]||0)+u.count;
       (provUsers[canonical]??=[]).push({user:u.user,count:u.count});
     });
 
-    notice.textContent='Provincias asignadas desde GR.xlsx. Se incluyen también las provincias con 0 mensajes. Haz clic en una provincia para ver el desglose.';
+    const matchedMessages=Object.values(prov).reduce((s,n)=>s+n,0);
+    const totalMessages=a.meta.messages||0;
+    let msg=`Provincias asignadas desde GR.xlsx: ${matchedMessages.toLocaleString('es-ES')} de ${totalMessages.toLocaleString('es-ES')} mensajes. Haz clic en una provincia para ver el desglose.`;
+    if(unmatched.length){
+      msg += `<br><span style="color:#a33">No se pudo asignar provincia a ${unmatched.length} usuario(s): ${unmatched.map(x=>escapeHtml(x.user)).join(', ')}.</span>`;
+    }
+    notice.innerHTML=msg;
     await renderSpainMap(prov,provUsers);
+
+    // Diagnóstico visible para que nunca vuelva a parecer que una provincia tiene 0 por un fallo silencioso.
+    if(unmatched.length){
+      document.getElementById('provinceBreakdown').insertAdjacentHTML('beforeend',htmlTable('Usuarios sin provincia asignada',['Usuario','Mensajes'],unmatched.map(x=>[x.user,x.count])));
+    }
   }catch(e){notice.textContent='No se pudo leer GR.xlsx: '+e.message;}
 }
-
 function normKey(s){
   return String(s??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
 }
