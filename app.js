@@ -9,7 +9,7 @@ const excelFile = document.getElementById('excelFile');
 const runBtn = document.getElementById('runBtn');
 const statusEl = document.getElementById('status');
 const progress = document.querySelector('#progress');
-const progressBar = progress.querySelector('div');
+const progressBar = progress ? progress.querySelector('div') : null;
 
 chatFile.addEventListener('change', async () => {
   const f = chatFile.files[0];
@@ -34,9 +34,21 @@ initPyodide().catch(e => statusEl.textContent = 'No se pudo cargar Python: '+e);
 runBtn.addEventListener('click', runAnalysis);
 
 async function runAnalysis(){
-  if(!chatText || !pyodide) return;
+  if(!chatText){
+    statusEl.textContent='Primero selecciona el fichero .txt del chat de WhatsApp.';
+    return;
+  }
   runBtn.disabled = true;
-  progress.style.display='block'; progressBar.style.width='10%';
+  if(progress){ progress.style.display='block'; if(progressBar) progressBar.style.width='10%'; }
+  try {
+    if(!pyodide) await initPyodide();
+  } catch(e) {
+    console.error(e);
+    statusEl.textContent='No se pudo cargar Python. Comprueba tu conexión a Internet y vuelve a intentarlo.';
+    alert('No se pudo cargar el motor Python. Comprueba la conexión a Internet y vuelve a pulsar «Analizar chat».');
+    runBtn.disabled=false;
+    return;
+  }
   statusEl.textContent='Analizando el chat…';
 
   const start = document.getElementById('startDate').value;
@@ -47,12 +59,12 @@ async function runAnalysis(){
     pyodide.globals.set('CHAT_TEXT', chatText);
     pyodide.globals.set('START_DATE', start);
     pyodide.globals.set('END_DATE', end);
-    progressBar.style.width='30%';
+    if(progressBar) progressBar.style.width='30%';
     const result = await pyodide.runPythonAsync(python);
-    progressBar.style.width='85%';
+    if(progressBar) progressBar.style.width='85%';
     analysis = JSON.parse(result);
     renderAll(analysis);
-    progressBar.style.width='100%';
+    if(progressBar) progressBar.style.width='100%';
     statusEl.textContent=`Análisis terminado: ${analysis.meta.messages.toLocaleString('es-ES')} mensajes de ${analysis.meta.users} usuarios.`;
     document.getElementById('results').classList.remove('hidden');
   }catch(e){
@@ -61,7 +73,7 @@ async function runAnalysis(){
     alert('Se ha producido un error. Abre F12 → Consola para ver los detalles.');
   }finally{
     runBtn.disabled=false;
-    setTimeout(()=>progress.style.display='none',500);
+    if(progress) setTimeout(()=>progress.style.display='none',500);
   }
 }
 
